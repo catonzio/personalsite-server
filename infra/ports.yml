@@ -1,0 +1,22 @@
+# Centralized Port Configuration
+# This file documents all ports used across the infrastructure and applications
+# Actual configuration is in .env file
+
+traefik:
+  http: 8080 # Main HTTP entrypoint (access apps via localhost:8080/app-name)
+  dashboard: 8081 # Traefik dashboard UI
+
+portainer:
+  http: 9000 # Portainer HTTP UI
+  https: 9443 # Portainer HTTPS UI
+
+applications:
+  internal_port: 8000 # Standard port used by all FastAPI apps inside containers
+
+
+  # Apps are accessed via Traefik reverse proxy:
+  # - localhost:8080/portfolio
+  # - localhost:8080/small-games
+  #
+  # Apps do NOT expose ports directly to the host - they only expose internally
+  # to the traefik-network where Traefik routes traffic to them

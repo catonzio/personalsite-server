@@ -1,0 +1,17 @@
+# Traefik static configuration
+api:
+  dashboard: true
+  insecure: true # Enable dashboard without auth for local dev
+
+entryPoints:
+  web:
+    address: ":80"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false # Only services with traefik.enable=true
+    watch: true # Auto-discover new containers
+
+log:
+  level: INFO
