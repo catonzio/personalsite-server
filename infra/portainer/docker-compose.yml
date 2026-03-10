@@ -5,7 +5,7 @@ services:
     container_name: portainer
     restart: unless-stopped
     env_file:
-      - ../.env
+      - ../ports.env
     ports:
       - "${PORTAINER_HTTPS_PORT:-9443}:9443"  # HTTPS UI
       - "${PORTAINER_HTTP_PORT:-9000}:9000"   # HTTP UI

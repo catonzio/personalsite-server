@@ -95,6 +95,27 @@ service_exists() {
     return $?
 }
 
+get_service_containers() {
+    local service=$1
+    local path=$(get_service_path "$service" 2>/dev/null)
+    
+    if [ -z "$path" ] || [ ! -f "$path/docker-compose.yml" ]; then
+        return 1
+    fi
+    
+    # Extract container names from docker-compose.yml
+    # Look for container_name: entries
+    local containers=()
+    while IFS= read -r line; do
+        if [[ $line =~ container_name:[[:space:]]*([^[:space:]]+) ]]; then
+            containers+=("${BASH_REMATCH[1]}")
+        fi
+    done < "$path/docker-compose.yml"
+    
+    # Return space-separated list
+    echo "${containers[@]}"
+}
+
 # Command functions
 cmd_start() {
     local service=$1
@@ -102,10 +123,19 @@ cmd_start() {
     if [ -z "$service" ]; then
         print_header "Starting All Services"
         
-        # Start infrastructure first
+        # Start traefik first if it exists (it creates the shared network)
+        if [[ " ${INFRA_SERVICES[@]} " =~ " traefik " ]]; then
+            print_info "Starting traefik (creates shared network)..."
+            cmd_start "traefik"
+            echo ""
+        fi
+        
+        # Start remaining infrastructure services
         print_info "Starting infrastructure services..."
         for svc in "${INFRA_SERVICES[@]}"; do
-            cmd_start "$svc"
+            if [ "$svc" != "traefik" ]; then
+                cmd_start "$svc"
+            fi
         done
         
         echo ""
@@ -261,12 +291,30 @@ cmd_status() {
         echo ""
         echo -e "${BLUE}Infrastructure Services:${NC}"
         for svc in "${INFRA_SERVICES[@]}"; do
-            local container="${svc}"
+            local containers=($(get_service_containers "$svc"))
             
-            if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-                echo -e "  ${GREEN}●${NC} $svc (running)"
+            if [ ${#containers[@]} -eq 0 ]; then
+                # Fallback to service name if no container_name found
+                containers=("$svc")
+            fi
+            
+            if [ ${#containers[@]} -eq 1 ]; then
+                # Single container - show on one line
+                if docker ps --format '{{.Names}}' | grep -q "^${containers[0]}$"; then
+                    echo -e "  ${GREEN}●${NC} $svc (running)"
+                else
+                    echo -e "  ${RED}●${NC} $svc (stopped)"
+                fi
             else
-                echo -e "  ${RED}●${NC} $svc (stopped)"
+                # Multiple containers - show service then sub-items
+                echo -e "  ${BLUE}▶${NC} $svc"
+                for container in "${containers[@]}"; do
+                    if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+                        echo -e "    ${GREEN}●${NC} $container (running)"
+                    else
+                        echo -e "    ${RED}●${NC} $container (stopped)"
+                    fi
+                done
             fi
         done
     fi
@@ -275,12 +323,30 @@ cmd_status() {
         echo ""
         echo -e "${BLUE}Application Services:${NC}"
         for svc in "${APP_SERVICES[@]}"; do
-            local container="${svc}-app"
+            local containers=($(get_service_containers "$svc"))
             
-            if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-                echo -e "  ${GREEN}●${NC} $svc (running)"
+            if [ ${#containers[@]} -eq 0 ]; then
+                # Fallback to service-app pattern if no container_name found
+                containers=("${svc}-app")
+            fi
+            
+            if [ ${#containers[@]} -eq 1 ]; then
+                # Single container - show on one line
+                if docker ps --format '{{.Names}}' | grep -q "^${containers[0]}$"; then
+                    echo -e "  ${GREEN}●${NC} $svc (running)"
+                else
+                    echo -e "  ${RED}●${NC} $svc (stopped)"
+                fi
             else
-                echo -e "  ${RED}●${NC} $svc (stopped)"
+                # Multiple containers - show service then sub-items
+                echo -e "  ${BLUE}▶${NC} $svc"
+                for container in "${containers[@]}"; do
+                    if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+                        echo -e "    ${GREEN}●${NC} $container (running)"
+                    else
+                        echo -e "    ${RED}●${NC} $container (stopped)"
+                    fi
+                done
             fi
         done
     fi
