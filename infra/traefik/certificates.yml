@@ -1,0 +1,14 @@
+# Traefik TLS certificates configuration
+tls:
+  certificates:
+    - certFile: /certs/certificate.crt
+      keyFile: /certs/private.key
+      # If you have multiple domains, add more entries:
+      # stores:
+      #   - default
+
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/certificate.crt
+        keyFile: /certs/private.key

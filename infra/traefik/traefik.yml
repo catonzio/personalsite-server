@@ -6,12 +6,26 @@ api:
 entryPoints:
   web:
     address: ":80"
+    # Redirect HTTP to HTTPS
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
 
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false # Only services with traefik.enable=true
     watch: true # Auto-discover new containers
+
+  file:
+    filename: /etc/traefik/certificates.yml
+    watch: true
 
 log:
   level: INFO

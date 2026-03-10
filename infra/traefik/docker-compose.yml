@@ -7,11 +7,14 @@ services:
     env_file:
       - ../ports.env
     ports:
-      - "${TRAEFIK_HTTP_PORT:-8080}:80"        # Main HTTP entrypoint
+      - "${TRAEFIK_HTTP_PORT:-80}:80"           # HTTP entrypoint
+      - "${TRAEFIK_HTTPS_PORT:-443}:443"        # HTTPS entrypoint
       - "${TRAEFIK_DASHBOARD_PORT:-8081}:8080"  # Traefik dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for auto-discovery
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./certificates.yml:/etc/traefik/certificates.yml:ro  # Certificate configuration
+      - ./certs:/certs:ro  # Your certificate files directory
     networks:
       - traefik-network
     labels:
