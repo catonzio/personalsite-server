@@ -1,0 +1,49 @@
+services:
+  # Backend service
+  {{APP_NAME}}-be:
+    build: ./be
+    container_name: {{APP_NAME}}-be
+    restart: unless-stopped
+    networks:
+      - {{APP_NAME}}-network  # Private network for BE-FE communication
+      - traefik-network      # Public network for Traefik routing
+    labels:
+      - "traefik.enable=true"
+      # Route /{{APP_NAME}}/api to backend
+      - "traefik.http.routers.{{APP_NAME}}-api.rule=PathPrefix(`/{{APP_NAME}}/api`)"
+      - "traefik.http.routers.{{APP_NAME}}-api.entrypoints=web"
+      - "traefik.http.routers.{{APP_NAME}}-api.priority=100"  # Higher priority for API routes
+      - "traefik.http.services.{{APP_NAME}}-api.loadbalancer.server.port=8000"
+      - "traefik.docker.network=traefik-network"
+
+  # Frontend service
+  {{APP_NAME}}-fe:
+    build: ./fe
+    container_name: {{APP_NAME}}-fe
+    restart: unless-stopped
+    networks:
+      - {{APP_NAME}}-network  # Private network for BE-FE communication
+      - traefik-network      # Public network for Traefik routing
+    labels:
+      - "traefik.enable=true"
+      # Route /{{APP_NAME}} to frontend (but not /{{APP_NAME}}/api)
+      - "traefik.http.routers.{{APP_NAME}}-fe.rule=PathPrefix(`/{{APP_NAME}}`)"
+      - "traefik.http.routers.{{APP_NAME}}-fe.entrypoints=web"
+      - "traefik.http.routers.{{APP_NAME}}-fe.priority=50"  # Lower priority so API takes precedence
+      - "traefik.http.services.{{APP_NAME}}-fe.loadbalancer.server.port=80"
+      - "traefik.docker.network=traefik-network"
+      # Middleware to strip the /{{APP_NAME}} prefix for the frontend
+      - "traefik.http.middlewares.{{APP_NAME}}-strip.stripprefix.prefixes=/{{APP_NAME}}"
+      - "traefik.http.routers.{{APP_NAME}}-fe.middlewares={{APP_NAME}}-strip"
+    depends_on:
+      - {{APP_NAME}}-be
+
+networks:
+  # Private network for internal BE-FE communication
+  {{APP_NAME}}-network:
+    name: {{APP_NAME}}-network
+    driver: bridge
+  
+  # Shared network with Traefik
+  traefik-network:
+    external: true

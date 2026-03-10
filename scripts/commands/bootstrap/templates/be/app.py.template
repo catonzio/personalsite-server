@@ -1,0 +1,42 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
+
+# Configure FastAPI to work behind a proxy with subpath
+app = FastAPI(
+    root_path="/{{APP_NAME}}/api",
+    title="{{APP_TITLE}} API",
+    description="Backend API for {{APP_TITLE}}",
+)
+
+# Enable CORS for frontend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend origin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+async def root():
+    return {
+        "app": "{{APP_NAME}}-api",
+        "message": "Welcome to {{APP_TITLE}} API!",
+        "timestamp": datetime.now().isoformat(),
+        "endpoints": {
+            "root": "/{{APP_NAME}}/api/",
+            "health": "/{{APP_NAME}}/api/health",
+            "docs": "/{{APP_NAME}}/api/docs",
+        },
+    }
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy",
+        "app": "{{APP_NAME}}-api",
+        "timestamp": datetime.now().isoformat(),
+    }

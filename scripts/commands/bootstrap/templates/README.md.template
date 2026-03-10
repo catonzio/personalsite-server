@@ -1,0 +1,75 @@
+# {{APP_TITLE}}
+
+A simple web application with FastAPI backend and HTML frontend.
+
+## Structure
+
+```
+{{APP_NAME}}/
+├── fe/                    # Frontend (nginx + HTML)
+│   ├── Dockerfile
+│   └── index.html
+├── be/                    # Backend (FastAPI)
+│   ├── Dockerfile
+│   ├── app.py
+│   └── requirements.txt
+├── docker-compose.yml     # Service orchestration
+└── README.md
+```
+
+## Development
+
+### Start the application
+```bash
+./manage.sh start {{APP_NAME}}
+```
+
+### View logs
+```bash
+./manage.sh logs {{APP_NAME}}
+```
+
+### Rebuild after changes
+```bash
+./manage.sh rebuild {{APP_NAME}}
+```
+
+### Stop the application
+```bash
+./manage.sh stop {{APP_NAME}}
+```
+
+## Access
+
+- Frontend: http://localhost:8080/{{APP_NAME}}
+- Backend API: http://localhost:8080/{{APP_NAME}}/api/
+- Health Check: http://localhost:8080/{{APP_NAME}}/api/health
+- API Docs: http://localhost:8080/{{APP_NAME}}/api/docs
+
+## Features
+
+- ✅ FastAPI backend with health endpoint
+- ✅ Simple HTML frontend (no JavaScript)
+- ✅ Docker containerization
+- ✅ Traefik reverse proxy routing
+- ✅ CORS enabled
+- ✅ Hot reload support (in development)
+
+## Add New Features
+
+### Backend (FastAPI)
+Edit `be/app.py` to add new endpoints:
+
+```python
+@app.get("/my-endpoint")
+async def my_endpoint():
+    return {"message": "Hello!"}
+```
+
+### Frontend (HTML)
+Edit `fe/index.html` to modify the UI.
+
+After making changes, rebuild:
+```bash
+./manage.sh rebuild {{APP_NAME}}
+```

@@ -11,6 +11,7 @@ Auto-discovers services from infra/ and apps/ directories
 Usage: $0 <command> [service] [options]
 
 Commands:
+  bootstrap <name>   Create a new app with FastAPI backend and HTML frontend
   init               Initialize the environment (build and start all services)
   start [service]    Start service(s) - all if no service specified
   stop [service]     Stop service(s) - all if no service specified
@@ -46,6 +47,7 @@ How to add new services:
   3. The script will automatically discover it!
 
 Examples:
+  $0 bootstrap my-new-app      # Create a new app called "my-new-app"
   $0 init                      # Initialize everything
   $0 start                     # Start all services
   $0 start portfolio           # Start only portfolio

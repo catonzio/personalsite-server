@@ -19,6 +19,10 @@ init_services
 
 # Main command dispatcher
 case "${1:-help}" in
+    bootstrap)
+        source "$SCRIPT_DIR/scripts/commands/bootstrap/bootstrap.sh"
+        cmd_bootstrap "${2:-}"
+        ;;
     init)
         source "$SCRIPT_DIR/scripts/commands/init.sh"
         cmd_init
