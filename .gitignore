@@ -1,7 +1,7 @@
 # Personal
 apps/
-certs/certificate.crt
-certs/private.key
+**/certs/certificate.crt
+**/certs/private.key
 
 # Python
 __pycache__/
