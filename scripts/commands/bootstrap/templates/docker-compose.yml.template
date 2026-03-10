@@ -3,6 +3,7 @@ services:
   {{APP_NAME}}-be:
     build: ./be
     container_name: {{APP_NAME}}-be
+    image: {{APP_NAME}}-be:latest
     restart: unless-stopped
     networks:
       - {{APP_NAME}}-network  # Private network for BE-FE communication
@@ -20,6 +21,7 @@ services:
   {{APP_NAME}}-fe:
     build: ./fe
     container_name: {{APP_NAME}}-fe
+    image: {{APP_NAME}}-fe:latest
     restart: unless-stopped
     networks:
       - {{APP_NAME}}-network  # Private network for BE-FE communication
