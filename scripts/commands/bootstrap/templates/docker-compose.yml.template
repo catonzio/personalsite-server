@@ -12,7 +12,8 @@ services:
       - "traefik.enable=true"
       # Route /{{APP_NAME}}/api to backend
       - "traefik.http.routers.{{APP_NAME}}-api.rule=PathPrefix(`/{{APP_NAME}}/api`)"
-      - "traefik.http.routers.{{APP_NAME}}-api.entrypoints=web"
+      - "traefik.http.routers.{{APP_NAME}}-api.tls=true"
+      - "traefik.http.routers.{{APP_NAME}}-api.entrypoints=web,websecure"
       - "traefik.http.routers.{{APP_NAME}}-api.priority=100"  # Higher priority for API routes
       - "traefik.http.services.{{APP_NAME}}-api.loadbalancer.server.port=8000"
       - "traefik.docker.network=traefik-network"
@@ -30,7 +31,8 @@ services:
       - "traefik.enable=true"
       # Route /{{APP_NAME}} to frontend (but not /{{APP_NAME}}/api)
       - "traefik.http.routers.{{APP_NAME}}-fe.rule=PathPrefix(`/{{APP_NAME}}`)"
-      - "traefik.http.routers.{{APP_NAME}}-fe.entrypoints=web"
+      - "traefik.http.routers.{{APP_NAME}}-fe.tls=true"
+      - "traefik.http.routers.{{APP_NAME}}-fe.entrypoints=web,websecure"
       - "traefik.http.routers.{{APP_NAME}}-fe.priority=50"  # Lower priority so API takes precedence
       - "traefik.http.services.{{APP_NAME}}-fe.loadbalancer.server.port=80"
       - "traefik.docker.network=traefik-network"
