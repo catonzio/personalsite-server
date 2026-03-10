@@ -163,6 +163,8 @@ See `infra/ports.yml` for detailed port documentation.
 
 ## 🔍 How It Works
 
+> 💡 **For comprehensive Traefik documentation**, see the [Traefik Cheatsheet](infra/README.md) with detailed routing rules, debugging tips, middleware configuration, and more.
+
 ### Automatic Service Discovery
 
 Traefik automatically discovers new services through Docker labels:
@@ -308,6 +310,8 @@ docker-compose up -d --build
 
 ## 🐛 Troubleshooting
 
+> 💡 **For detailed Traefik debugging**, see the [Troubleshooting section](infra/README.md#debugging--troubleshooting) in the Traefik Cheatsheet.
+
 ### Application not accessible
 
 1. Check if Traefik is running: `docker ps | grep traefik`
@@ -340,6 +344,12 @@ docker logs {container-name}
 ```
 
 ## 📚 Additional Resources
+
+### Project Documentation
+
+- **[Traefik Comprehensive Cheatsheet](infra/README.md)** - Complete guide to Traefik configuration, routing rules, Docker labels, debugging, and advanced features
+
+### External Documentation
 
 - [Traefik Documentation](https://doc.traefik.io/traefik/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
