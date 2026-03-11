@@ -7,7 +7,7 @@ discover_infra_services() {
     local services=()
     if [ -d "infra" ]; then
         for dir in infra/*/; do
-            if [ -f "${dir}docker-compose.yml" ]; then
+            if [ -f "${dir}docker-compose.yml" ] || [ -f "${dir}compose.yaml" ]; then
                 local service=$(basename "$dir")
                 services+=("$service")
             fi
@@ -25,8 +25,8 @@ discover_app_services() {
         local current_dir="$1"
         local relative_path="$2"
         
-        # Check if docker-compose.yml exists in current directory
-        if [ -f "${current_dir}/docker-compose.yml" ]; then
+        # Check if docker-compose.yml or compose.yaml exists in current directory
+        if [ -f "${current_dir}/docker-compose.yml" ] || [ -f "${current_dir}/compose.yaml" ]; then
             # Found a compose file, add this path and stop searching deeper
             services+=("$relative_path")
         else
