@@ -23,7 +23,7 @@ cmd_rebuild() {
         print_header "Rebuilding and Restarting $service"
         local path=$(get_service_path "$service")
         print_info "Rebuilding $service..."
-        (cd "$path" && docker-compose up -d --build)
+        (cd "$path" && docker compose up -d --build)
         print_success "$service rebuilt and restarted"
     fi
 }

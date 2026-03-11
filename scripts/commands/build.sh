@@ -22,7 +22,7 @@ cmd_build() {
         
         local path=$(get_service_path "$service")
         print_info "Building $service..."
-        (cd "$path" && docker-compose build)
+        (cd "$path" && docker compose build)
         print_success "$service built"
     fi
 }

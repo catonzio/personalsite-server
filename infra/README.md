@@ -448,7 +448,7 @@ To update labels:
 # 1. Update labels in docker-compose.yml
 # 2. Stop and recreate container
 cd apps/portfolio
-docker-compose up -d --force-recreate
+docker compose up -d --force-recreate
 
 # Traefik detects changes automatically within seconds
 ```
@@ -459,7 +459,7 @@ Only needed if changing `traefik.yml` (static config):
 
 ```bash
 cd infra/traefik
-docker-compose restart
+docker compose restart
 
 # Or using management script
 ./manage.sh restart traefik
@@ -613,7 +613,7 @@ docker logs traefik 2>&1 | grep -i "health"
 
 ```bash
 cd apps/portfolio
-docker-compose up -d --force-recreate
+docker compose up -d --force-recreate
 
 # Wait 2-3 seconds for Traefik to detect
 sleep 3
@@ -635,7 +635,7 @@ log:
 
 ```bash
 cd infra/traefik
-docker-compose restart
+docker compose restart
 ```
 
 **View detailed logs:**
@@ -1067,7 +1067,7 @@ docker inspect <container> | grep -A 20 "Labels"
 docker ps --filter "label=traefik.enable=true"
 
 # Restart Traefik
-cd infra/traefik && docker-compose restart
+cd infra/traefik && docker compose restart
 ```
 
 ### Label Template

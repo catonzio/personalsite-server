@@ -51,7 +51,7 @@ Start Traefik first (required to create shared network):
 
 ```bash
 cd infra/traefik
-docker-compose up -d
+docker compose up -d
 ```
 
 Then start applications:
@@ -59,18 +59,18 @@ Then start applications:
 ```bash
 # Start portfolio
 cd apps/portfolio
-docker-compose up -d
+docker compose up -d
 
 # Start small-games
 cd apps/small-games
-docker-compose up -d
+docker compose up -d
 ```
 
 (Optional) Start Portainer:
 
 ```bash
 cd infra/portainer
-docker-compose up -d
+docker compose up -d
 ```
 
 ## 🌐 Accessing Services
@@ -290,7 +290,7 @@ docker logs small-games-app -f
 ```bash
 # Manual approach - stop a specific app
 cd apps/portfolio
-docker-compose down
+docker compose down
 
 # Or use the management script
 ./manage.sh stop portfolio
@@ -302,7 +302,7 @@ docker-compose down
 ```bash
 # Manual approach
 cd apps/portfolio
-docker-compose up -d --build
+docker compose up -d --build
 
 # Or use the management script (recommended)
 ./manage.sh rebuild portfolio
@@ -331,8 +331,8 @@ Then restart Traefik:
 
 ```bash
 cd infra/traefik
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ### Container won't start

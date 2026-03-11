@@ -27,7 +27,7 @@ cmd_stop() {
         
         local path=$(get_service_path "$service")
         print_info "Stopping $service..."
-        (cd "$path" && docker-compose down)
+        (cd "$path" && docker compose down)
         print_success "$service stopped"
     fi
 }

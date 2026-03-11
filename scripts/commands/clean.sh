@@ -18,13 +18,13 @@ cmd_clean() {
         # Dynamically remove containers from all discovered services
         for svc in "${INFRA_SERVICES[@]}"; do
             if [ -f "infra/$svc/docker-compose.yml" ]; then
-                docker-compose -f "infra/$svc/docker-compose.yml" rm -f 2>/dev/null || true
+                docker compose -f "infra/$svc/docker-compose.yml" rm -f 2>/dev/null || true
             fi
         done
         
         for svc in "${APP_SERVICES[@]}"; do
             if [ -f "apps/$svc/docker-compose.yml" ]; then
-                docker-compose -f "apps/$svc/docker-compose.yml" rm -f 2>/dev/null || true
+                docker compose -f "apps/$svc/docker-compose.yml" rm -f 2>/dev/null || true
             fi
         done
         

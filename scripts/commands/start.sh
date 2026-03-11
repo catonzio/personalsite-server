@@ -42,7 +42,7 @@ cmd_start() {
         
         local path=$(get_service_path "$service")
         print_info "Starting $service..."
-        (cd "$path" && docker-compose up -d)
+        (cd "$path" && docker compose up -d)
         print_success "$service started"
     fi
 }
