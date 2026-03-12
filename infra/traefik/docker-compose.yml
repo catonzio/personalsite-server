@@ -1,7 +1,7 @@
 
 services:
   traefik:
-    image: traefik:v2.10
+    image: traefik:v2.11
     container_name: traefik
     restart: unless-stopped
     env_file:
@@ -14,7 +14,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for auto-discovery
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
       - ./certificates.yml:/etc/traefik/certificates.yml:ro  # Certificate configuration
-      - ./certs:/certs:ro  # Your certificate files directory
+      - /etc/letsencrypt:/letsencrypt:ro  # Let's Encrypt certificates
     networks:
       - traefik-network
     labels:

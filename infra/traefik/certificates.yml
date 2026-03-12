@@ -1,14 +1,11 @@
-# Traefik TLS certificates configuration
+# Traefik TLS certificates configuration (Let's Encrypt via certbot)
 tls:
   certificates:
-    - certFile: /certs/certificate.crt
-      keyFile: /certs/private.key
-      # If you have multiple domains, add more entries:
-      # stores:
-      #   - default
+    - certFile: /letsencrypt/live/danilocatone.com/fullchain.pem
+      keyFile: /letsencrypt/live/danilocatone.com/privkey.pem
 
   stores:
     default:
       defaultCertificate:
-        certFile: /certs/certificate.crt
-        keyFile: /certs/private.key
+        certFile: /letsencrypt/live/danilocatone.com/fullchain.pem
+        keyFile: /letsencrypt/live/danilocatone.com/privkey.pem
