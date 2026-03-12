@@ -19,6 +19,7 @@ Commands:
   build [service]    Build service(s) - all apps if no service specified
   rebuild [service]  Rebuild and restart service(s)
   logs <service> [-f]  Show logs for a service (use -f to follow)
+  services           List all discovered services
   status             Show status of all services
   ps                 Show running containers
   clean              Stop all services and clean up Docker resources

@@ -51,6 +51,10 @@ case "${1:-help}" in
         source "$SCRIPT_DIR/scripts/commands/logs.sh"
         cmd_logs "${2:-}" "${3:-}"
         ;;
+    services)
+        source "$SCRIPT_DIR/scripts/commands/services.sh"
+        cmd_services
+        ;;
     status)
         source "$SCRIPT_DIR/scripts/commands/status.sh"
         cmd_status
