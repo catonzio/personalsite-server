@@ -27,7 +27,11 @@ cmd_stop() {
         
         local path=$(get_service_path "$service")
         print_info "Stopping $service..."
-        (cd "$path" && docker compose down)
+        local env_flag=""
+        if [ -f "$path/compose.env" ]; then
+            env_flag="--env-file compose.env"
+        fi
+        (cd "$path" && docker compose $env_flag down)
         print_success "$service stopped"
     fi
 }

@@ -22,7 +22,11 @@ cmd_build() {
         
         local path=$(get_service_path "$service")
         print_info "Building $service..."
-        (cd "$path" && docker compose build)
+        local env_flag=""
+        if [ -f "$path/compose.env" ]; then
+            env_flag="--env-file compose.env"
+        fi
+        (cd "$path" && docker compose $env_flag build)
         print_success "$service built"
     fi
 }

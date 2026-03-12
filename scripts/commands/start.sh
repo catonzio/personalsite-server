@@ -42,7 +42,11 @@ cmd_start() {
         
         local path=$(get_service_path "$service")
         print_info "Starting $service..."
-        (cd "$path" && docker compose up -d)
+        local env_flag=""
+        if [ -f "$path/compose.env" ]; then
+            env_flag="--env-file compose.env"
+        fi
+        (cd "$path" && docker compose $env_flag up -d)
         print_success "$service started"
     fi
 }

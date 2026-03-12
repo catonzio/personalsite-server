@@ -13,7 +13,7 @@ get_service_path() {
     fi
     
     # Check apps directory
-    if [ -d "apps/$service" ] && [ -f "apps/$service/docker-compose.yml" ]; then
+    if [ -d "apps/$service" ] && { [ -f "apps/$service/docker-compose.yml" ] || [ -f "apps/$service/compose.yaml" ]; }; then
         echo "apps/$service"
         return 0
     fi

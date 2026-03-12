@@ -23,7 +23,11 @@ cmd_rebuild() {
         print_header "Rebuilding and Restarting $service"
         local path=$(get_service_path "$service")
         print_info "Rebuilding $service..."
-        (cd "$path" && docker compose up -d --build)
+        local env_flag=""
+        if [ -f "$path/compose.env" ]; then
+            env_flag="--env-file compose.env"
+        fi
+        (cd "$path" && docker compose $env_flag up -d --build)
         print_success "$service rebuilt and restarted"
     fi
 }

@@ -20,11 +20,15 @@ cmd_logs() {
     
     local path=$(get_service_path "$service")
     print_info "Showing logs for $service..."
+    local env_flag=""
+    if [ -f "$path/compose.env" ]; then
+        env_flag="--env-file compose.env"
+    fi
     
     if [ "$follow" = "follow" ] || [ "$follow" = "-f" ]; then
-        (cd "$path" && docker compose logs -f)
+        (cd "$path" && docker compose $env_flag logs -f)
     else
-        (cd "$path" && docker compose logs --tail=100)
+        (cd "$path" && docker compose $env_flag logs --tail=100)
     fi
 }
 
