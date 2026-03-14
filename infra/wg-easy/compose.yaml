@@ -1,0 +1,56 @@
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    networks:
+      - traefik-network
+      - wg
+      
+    environment:
+      - LANG=en
+      - WG_HOST=danilocatone.com
+      - PASSWORD_HASH=$$2a$$12$$uGpbM4TOLaFcJu5o7hCNZurABQ6IY30Rxfb9G36AVelymM2bXQsry
+      - WG_PORT=51820
+      - WG_DEFAULT_DNS=1.1.1.1
+      - WG_ALLOWED_IPS=0.0.0.0/0
+      # - WG_POST_UP=iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth1 -j MASQUERADE; iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT
+      - WG_POST_UP=iptables -t nat -A POSTROUTING -d 192.168.1.0/24 -o eth1 -j MASQUERADE
+      # - WG_POST_DOWN=iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o eth1 -j MASQUERADE; iptables -D INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT
+    labels:
+      - "traefik.enable=true"
+      # - "traefik.http.routers.wg-easy.rule=Host(`danilocatone.com`)"
+      - "traefik.http.routers.wg-easy.rule=PathPrefix(`/wg-easy`)"
+      - "traefik.http.routers.wg-easy.entrypoints=web,websecure"
+      # - "traefik.http.routers.wg-easy.service=wg-easy"
+      - "traefik.http.routers.prova-api.tls=true"
+      - "traefik.http.services.wg-easy.loadbalancer.server.port=51821"
+      - "traefik.docker.network=traefik-network"
+    volumes:
+      - ./wg-easy:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"         # web UI
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+    restart: unless-stopped
+
+networks:
+  # Shared network with Traefik
+  traefik-network:
+    external: true
+  wg:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
