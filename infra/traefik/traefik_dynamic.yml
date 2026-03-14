@@ -1,0 +1,28 @@
+http:
+  middlewares:
+    services:
+      basicAuth:
+        users:
+          - 'dcatone:$$2a$$12$$Y2doS5wA6bupm2YJ.e1UuunCDRtLaPgPcte6pHLJl52SpQU7MzhGe' # bcrypt hash of your password
+    compress:
+      compress: {}
+    hsts:
+      headers:
+        stsSeconds: 2592000
+  routers:
+    api:
+      rule: Host(`traefik.danilocatone.com`)
+      entrypoints:
+        - websecure
+      middlewares:
+        - services
+      service: api@internal
+
+tls:
+  options:
+    default:
+      cipherSuites:
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      sniStrict: true

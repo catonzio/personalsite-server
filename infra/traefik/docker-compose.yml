@@ -13,6 +13,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for auto-discovery
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik_dynamic.yml:/etc/traefik/traefik_dynamic.yml:ro  # Dynamic configuration
       - ./certificates.yml:/etc/traefik/certificates.yml:ro  # Certificate configuration
       - /etc/letsencrypt:/letsencrypt:ro  # Let's Encrypt certificates
     networks:
