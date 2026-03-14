@@ -3,6 +3,9 @@ apps/
 **/certs/certificate.crt
 **/certs/private.key
 
+infra/pi-hole/etc-pihole
+infra/wg-easy/wg-easy
+
 # Python
 __pycache__/
 *.py[cod]
