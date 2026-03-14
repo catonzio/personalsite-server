@@ -7,7 +7,7 @@ get_service_path() {
     local service=$1
     
     # Check infrastructure directory
-    if [ -d "infra/$service" ] && [ -f "infra/$service/docker-compose.yml" ]; then
+    if [ -d "infra/$service" ] && { [ -f "infra/$service/docker-compose.yml" ] || [ -f "infra/$service/compose.yaml" ]; }; then
         echo "infra/$service"
         return 0
     fi
