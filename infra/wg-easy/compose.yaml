@@ -7,12 +7,13 @@ services:
       - wg
       
     environment:
-      - LANG=en
+      # - LANG=en
       - WG_HOST=danilocatone.com
-      - PASSWORD_HASH=$$2a$$12$$uGpbM4TOLaFcJu5o7hCNZurABQ6IY30Rxfb9G36AVelymM2bXQsry
-      - WG_PORT=51820
-      - WG_DEFAULT_DNS=1.1.1.1
-      - WG_ALLOWED_IPS=0.0.0.0/0
+      - INSECURE=true
+      # - PASSWORD_HASH=$$2a$$12$$uGpbM4TOLaFcJu5o7hCNZurABQ6IY30Rxfb9G36AVelymM2bXQsry
+      # - WG_PORT=51820
+      # - WG_DEFAULT_DNS=1.1.1.1
+      # - WG_ALLOWED_IPS=0.0.0.0/0
       # - WG_POST_UP=iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth1 -j MASQUERADE; iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT
       - WG_POST_UP=iptables -t nat -A POSTROUTING -d 192.168.1.0/24 -o eth1 -j MASQUERADE
       # - WG_POST_DOWN=iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o eth1 -j MASQUERADE; iptables -D INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT
@@ -40,6 +41,22 @@ services:
       - net.ipv6.conf.all.disable_ipv6=0
       - net.ipv6.conf.all.forwarding=1
       - net.ipv6.conf.default.forwarding=1
+    restart: unless-stopped
+
+  wg-easy-setup:
+    image: alpine:latest
+    container_name: wg-easy-setup
+    network_mode: "service:wg-easy"
+    depends_on:
+      - wg-easy
+    cap_add:
+      - NET_ADMIN
+    command: >
+      sh -c "sleep 10 && 
+             apk add --no-cache iptables && 
+             iptables -t nat -A POSTROUTING -d 192.168.1.0/24 -o eth1 -j MASQUERADE || true &&
+             echo 'iptables rule applied' &&
+             tail -f /dev/null"
     restart: unless-stopped
 
 networks:

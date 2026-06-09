@@ -6,6 +6,8 @@ apps/
 infra/pi-hole/etc-pihole
 infra/wg-easy/wg-easy
 
+wireguard
+
 # Python
 __pycache__/
 *.py[cod]
