@@ -43,5 +43,5 @@ require_cmd() {
     log_last_line
     exit 1
   fi
-  log_info "Validated dependency: ${cmd}."
+  # log_info "Validated dependency: ${cmd}."
 }

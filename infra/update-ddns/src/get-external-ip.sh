@@ -34,13 +34,13 @@ fetch_external_ip() {
   )
 
   for provider in "${providers[@]}"; do
-    log_info "Trying external IP provider: ${provider}."
+    # log_info "Trying external IP provider: ${provider}."
     response="$(curl -fsS --max-time 5 "$provider" || true)"
     response="${response//$'\r'/}"
     response="${response//$'\n'/}"
 
     if [[ -n "$response" ]] && is_valid_ipv4 "$response"; then
-      log_info "Provider ${provider} returned valid IPv4: ${response}."
+      # log_info "Provider ${provider} returned valid IPv4: ${response}."
       printf '%s\n' "$response"
       return 0
     fi
@@ -58,11 +58,11 @@ fetch_external_ip() {
 
 read_last_ip() {
   if [[ ! -f "${STATE_FILE}" ]]; then
-    log_info "State file not found, first run expected: ${STATE_FILE}."
+    # log_info "State file not found, first run expected: ${STATE_FILE}."
     return 0
   fi
 
-  log_info "Reading last IP from state file: ${STATE_FILE}."
+  # log_info "Reading last IP from state file: ${STATE_FILE}."
   tr -d '\r\n' <"${STATE_FILE}"
 }
 
@@ -93,8 +93,8 @@ main() {
   trap 'on_error "$?" "$LINENO"' ERR
 
   init_logging "${DEFAULT_LOG_FILE}"
-  log_info "Starting get-external-ip execution."
-  log_info "Logs are being appended to ${LOG_FILE}."
+  # log_info "Starting get-external-ip execution."
+  # log_info "Logs are being appended to ${LOG_FILE}."
 
   require_cmd curl
 
@@ -107,7 +107,7 @@ main() {
     exit 1
   fi
 
-  log_info "Resolved current external IPv4: ${current_ip}."
+  # log_info "Resolved current external IPv4: ${current_ip}."
 
   last_ip="$(read_last_ip)"
   if [[ -n "${last_ip}" ]] && ! is_valid_ipv4 "${last_ip}"; then
@@ -118,6 +118,7 @@ main() {
   if [[ -z "${last_ip}" ]]; then
     printf 'Current external IPv4: %s (first recorded value)\n' "${current_ip}"
     log_info "First IP value recorded: ${current_ip}."
+    save_current_ip "${current_ip}"
   elif [[ "${last_ip}" == "${current_ip}" ]]; then
     printf 'Current external IPv4: %s (unchanged)\n' "${current_ip}"
     log_info "External IPv4 unchanged: ${current_ip}."
@@ -125,18 +126,16 @@ main() {
     printf 'External IPv4 changed: %s -> %s\n' "${last_ip}" "${current_ip}"
     log_info "External IPv4 changed from ${last_ip} to ${current_ip}."
 
-    echo "Triggering DDNS update..."
     if run_update_ddns; then
-      echo "DDNS update completed."
+      save_current_ip "${current_ip}"
+      # log_info "State updated with new external IPv4: ${current_ip}."
     else
-      echo "Error: DDNS update failed." >&2
       log_last_line
       exit 1
     fi
   fi
 
-  save_current_ip "${current_ip}"
-  log_info "Execution completed successfully."
+  # log_info "Execution completed successfully."
   log_last_line
 }
 
