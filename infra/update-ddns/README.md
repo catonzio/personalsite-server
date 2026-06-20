@@ -7,6 +7,7 @@ The repository includes:
 1. A Bash implementation (`./src/update-ddns.sh`)
 2. A Bash helper to print your current external IPv4 (`./src/get-external-ip.sh`)
 3. A shared Bash library for common and logging functions (`./src/lib/common.sh`)
+4. A Bash manager to install/uninstall a cron job for the IP helper (`./src/manage-get-external-ip-cron.sh`)
 
 ## Installation
 
@@ -121,6 +122,22 @@ Defaults:
 
 - state file: `./external-ip.last`
 - log file: `./get-external-ip.log`
+
+### Install/Uninstall Cron Job (Every 2 Minutes)
+
+Run:
+
+```bash
+./src/manage-get-external-ip-cron.sh install
+./src/manage-get-external-ip-cron.sh status
+./src/manage-get-external-ip-cron.sh uninstall
+```
+
+What it does:
+
+- installs a managed cron entry that runs `./src/get-external-ip.sh` every 2 minutes
+- uses a unique tag so only this managed entry is updated/removed
+- keeps other existing crontab entries untouched
 
 ## References
 
