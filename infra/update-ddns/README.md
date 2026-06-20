@@ -5,6 +5,8 @@ This is a little project that helps updating the DNS entries of a IONOS domain w
 The repository includes:
 
 1. A Bash implementation (`./src/update-ddns.sh`)
+2. A Bash helper to print your current external IPv4 (`./src/get-external-ip.sh`)
+3. A shared Bash library for common and logging functions (`./src/lib/common.sh`)
 
 ## Installation
 
@@ -21,6 +23,7 @@ The repository includes:
 - `IONOS_PRIVATE_APIKEY` (required)
 - `DOMAINS` (required, JSON array of strings)
 - `LOG_FILE` (optional, Bash script only; defaults to `update-ddns.log`)
+- `STATE_FILE` (optional, external IP helper only; defaults to `external-ip.last` in project root)
 
 Example:
 
@@ -29,6 +32,7 @@ IONOS_PUBLIC_APIKEY=your_public_key
 IONOS_PRIVATE_APIKEY=your_private_key
 DOMAINS=["example.com","*.example.com"]
 LOG_FILE=logs/update-ddns.log
+STATE_FILE=state/external-ip.last
 ```
 
 ## Usage
@@ -92,6 +96,31 @@ tail -n 50 "${LOG_FILE:-update-ddns.log}"
 ```
 
 This updates DDNS every 5 minutes and appends execution details to the configured log file.
+
+### External IP Helper Script
+
+Run:
+
+```bash
+./src/get-external-ip.sh
+```
+
+Requirements:
+
+- `curl`
+
+The script stores the current external IPv4 in a state file and compares it on the next runs.
+
+Output behavior:
+
+- first run: `Current external IPv4: <ip> (first recorded value)`
+- unchanged: `Current external IPv4: <ip> (unchanged)`
+- changed: `External IPv4 changed: <old> -> <new>`
+
+Defaults:
+
+- state file: `./external-ip.last`
+- log file: `./get-external-ip.log`
 
 ## References
 
