@@ -24,7 +24,7 @@ providers:
     watch: true # Auto-discover new containers
 
   file:
-    filename: /etc/traefik/certificates.yml
+    directory: /etc/traefik/conf.d
     watch: true
 
 log:

@@ -9,7 +9,21 @@ http:
     hsts:
       headers:
         stsSeconds: 2592000
+    redirect-to-portfolio:
+      redirectRegex:
+        regex: "^https?://([^/]+)/?$"
+        replacement: "https://${1}/portfolio/"
+        permanent: true
   routers:
+    root-redirect:
+      rule: "Path(`/`)"
+      entrypoints:
+        - websecure
+      middlewares:
+        - redirect-to-portfolio
+      service: api@internal
+      priority: 1
+      tls: {}
     api:
       rule: Host(`traefik.danilocatone.com`)
       entrypoints:
@@ -19,6 +33,14 @@ http:
       service: api@internal
 
 tls:
+  certificates:
+    - certFile: /letsencrypt/live/danilocatone.com/fullchain.pem
+      keyFile: /letsencrypt/live/danilocatone.com/privkey.pem
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /letsencrypt/live/danilocatone.com/fullchain.pem
+        keyFile: /letsencrypt/live/danilocatone.com/privkey.pem
   options:
     default:
       cipherSuites:
