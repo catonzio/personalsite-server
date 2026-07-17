@@ -1,0 +1,27 @@
+services:
+  privacy-policy:
+    build: .
+    container_name: privacy-policy
+    restart: unless-stopped
+    ports:
+      - "4100:8080"   # direct local access, bypasses Traefik: http://localhost:4100/
+    networks:
+      - traefik-network
+    volumes:
+      - ./policies:/data:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.privacy-policy.rule=PathPrefix(`/privacy-policy`)"
+      - "traefik.http.routers.privacy-policy.tls=true"
+      - "traefik.http.routers.privacy-policy.entrypoints=web,websecure"
+      - "traefik.http.middlewares.privacy-policy-slash.redirectregex.regex=^https?://([^/]+)/privacy-policy$$"
+      - "traefik.http.middlewares.privacy-policy-slash.redirectregex.replacement=https://$${1}/privacy-policy/"
+      - "traefik.http.middlewares.privacy-policy-slash.redirectregex.permanent=true"
+      - "traefik.http.middlewares.privacy-policy-strip.stripprefix.prefixes=/privacy-policy"
+      - "traefik.http.routers.privacy-policy.middlewares=privacy-policy-slash,privacy-policy-strip"
+      - "traefik.http.services.privacy-policy.loadbalancer.server.port=8080"
+      - "traefik.docker.network=traefik-network"
+
+networks:
+  traefik-network:
+    external: true
