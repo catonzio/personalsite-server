@@ -1,8 +1,8 @@
-# Build stage: compile a static, dependency-free binary
+# Build stage: resolve deps (writes go.sum) and compile a static binary
 FROM golang:1.23-alpine AS build
 WORKDIR /src
-COPY go.mod ./
-COPY main.go ./
+COPY src/ ./
+RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server .
 
 # Final stage: distroless, no shell, runs as non-root by default
