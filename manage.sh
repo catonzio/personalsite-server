@@ -43,6 +43,10 @@ case "${1:-help}" in
         source "$SCRIPT_DIR/scripts/commands/build.sh"
         cmd_build "${2:-}"
         ;;
+    pull)
+        source "$SCRIPT_DIR/scripts/commands/pull.sh"
+        cmd_pull "${@:2}"
+        ;;
     rebuild)
         source "$SCRIPT_DIR/scripts/commands/rebuild.sh"
         cmd_rebuild "${2:-}"

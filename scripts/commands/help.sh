@@ -17,6 +17,7 @@ Commands:
   stop [service]     Stop service(s) - all if no service specified
   restart [service]  Restart service(s) - all if no service specified
   build [service]    Build service(s) - all apps if no service specified
+  pull [service] [--build|--rebuild]  Git pull, then optionally build or rebuild+restart
   rebuild [service]  Rebuild and restart service(s)
   logs <service> [-f]  Show logs for a service (use -f to follow)
   services           List all discovered services
