@@ -6,6 +6,9 @@ services:
     restart: unless-stopped
     env_file:
       - ../ports.env
+    environment:
+      # IONOS DNS API key is "<public prefix>.<secret>"; the parts come from ./.env
+      - IONOS_API_KEY=${IONOS_PUBLIC_APIKEY}.${IONOS_PRIVATE_APIKEY}
     ports:
       - "${TRAEFIK_HTTP_PORT:-80}:80"           # HTTP entrypoint
       - "${TRAEFIK_HTTPS_PORT:-443}:443"        # HTTPS entrypoint
@@ -14,7 +17,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for auto-discovery
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik_dynamic.yml:/etc/traefik/conf.d/traefik_dynamic.yml:ro  # Dynamic configuration
-      - /etc/letsencrypt:/letsencrypt:ro  # Let's Encrypt certificates
+      - ./letsencrypt:/letsencrypt  # ACME storage (acme.json)
     networks:
       - traefik-network
     labels:

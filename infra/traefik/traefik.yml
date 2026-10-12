@@ -27,5 +27,17 @@ providers:
     directory: /etc/traefik/conf.d
     watch: true
 
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: danilocatone@gmail.com
+      storage: /letsencrypt/acme.json
+      # DNS-01 through the IONOS DNS API (needed for the wildcard certificate)
+      dnsChallenge:
+        provider: ionos
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
+
 log:
   level: INFO

@@ -31,16 +31,16 @@ http:
       middlewares:
         - services
       service: api@internal
+      # This router requests the wildcard certificate; every other router is served
+      # with it automatically through SNI matching
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: danilocatone.com
+            sans:
+              - "*.danilocatone.com"
 
 tls:
-  certificates:
-    - certFile: /letsencrypt/live/danilocatone.com/fullchain.pem
-      keyFile: /letsencrypt/live/danilocatone.com/privkey.pem
-  stores:
-    default:
-      defaultCertificate:
-        certFile: /letsencrypt/live/danilocatone.com/fullchain.pem
-        keyFile: /letsencrypt/live/danilocatone.com/privkey.pem
   options:
     default:
       cipherSuites:

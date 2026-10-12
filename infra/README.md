@@ -949,7 +949,14 @@ entryPoints:
 
 #### 3. Use Let's Encrypt
 
-Automatic SSL certificates:
+This server already does: [traefik.yml](traefik/traefik.yml) defines the `letsencrypt` resolver with a DNS-01
+challenge on IONOS (wildcard `*.danilocatone.com`), and the `api` router in
+[traefik_dynamic.yml](traefik/traefik_dynamic.yml) requests the certificate. Traefik renews it by itself
+(30 days before expiry); it is stored in `traefik/letsencrypt/acme.json`. The IONOS API key
+(`IONOS_PUBLIC_APIKEY` / `IONOS_PRIVATE_APIKEY`) is read from `traefik/.env` (not committed; same keys as
+`update-ddns/.env`).
+
+Generic example:
 
 ```yaml
 certificatesResolvers:

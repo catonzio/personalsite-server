@@ -1,7 +1,7 @@
 # Personal
 apps/
-**/certs/certificate.crt
-**/certs/private.key
+infra/traefik/letsencrypt/
+infra/traefik/.env
 
 infra/pi-hole/etc-pihole
 infra/wg-easy/wg-easy
@@ -38,3 +38,7 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# TLS certificates/keys from the provider
+*.key
+*.cer
