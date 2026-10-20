@@ -12,7 +12,8 @@ Everything runs in Docker Compose behind Traefik. Root repo: `git@github.com:cat
 ## Routing (Traefik v2.11, `infra/traefik/`)
 - Entrypoints: `web` :80 (permanent redirect → https) and `websecure` :443. Providers: docker (`exposedByDefault=false`) + file (`traefik_dynamic.yml` mounted in `/etc/traefik/conf.d`, hot reload).
 - TLS: resolver `letsencrypt` with DNS-01 on IONOS. It issues a wildcard `danilocatone.com` + `*.danilocatone.com`, requested only by the `api` router. Other routers just set `tls=true` and pick it up by SNI. Keys are in `infra/traefik/.env` (`IONOS_PUBLIC_APIKEY`/`IONOS_PRIVATE_APIKEY`, combined into `IONOS_API_KEY`). The cert is in `letsencrypt/acme.json`. Default TLS has `sniStrict: true`. Never add a static `defaultCertificate` for the domain (it blocks ACME). Don't delete acme.json lightly (LE rate limits).
-- Dynamic file: `root-redirect` (`/` → `/portfolio/`), `api` = dashboard at `traefik.danilocatone.com` with basicAuth middleware `services`. Also defines `compress` and `hsts` (currently unused). The dashboard is also open without auth on host :8081 (`api.insecure`).
+- Dynamic file: `root-redirect` (`/` → `/portfolio/`), `api` router on `traefik.danilocatone.com` (that hostname has **no DNS record**; the router is kept because it requests the wildcard cert). Also defines `compress` and `hsts` (currently unused). The dashboard is open without auth on host :8081 (`api.insecure`).
+- basicAuth middleware `services@file`: users come from `{{ env "TRAEFIK_BASIC_AUTH_USERS" }}` (Traefik file-provider Go template), passed by `docker-compose.yml` from `infra/traefik/.env`. Format there: single-quoted htpasswd line with **single** `$` (`TRAEFIK_BASIC_AUTH_USERS='user:$2y$12$...'`); generate with `docker run --rm -it httpd:2.4-alpine htpasswd -nBC 12 <user>`. Changing it needs a traefik recreate. Check validity without printing the hash via `curl -s localhost:8081/api/http/middlewares/services@file` (`status` must be `enabled`).
 - Shared network `traefik-network` is created by the traefik stack. Every other stack declares it `external: true`. Start traefik first.
 - **Convention: path-based routing on one host**, not subdomains. App label template:
   ```
@@ -32,10 +33,18 @@ Everything runs in Docker Compose behind Traefik. Root repo: `git@github.com:cat
 | traefik | reverse proxy + ACME | 80/443, dashboard 8081 |
 | portainer | portainer-ce, docker.sock rw | host 9000/9443 only (no labels) |
 | pi-hole | DNS, container `pihole` | 53 tcp/udp, web 8080/4433. Default net, not on traefik-network |
-| wg-easy | WireGuard v15, `WG_HOST=danilocatone.com`, 51820/udp, UI 51821. Sidecar `wg-easy-setup` re-applies the MASQUERADE to LAN via `eth1` | label `/wg-easy` (broken: tls label is on `prova-api`, no strip) |
+| wg-easy | WireGuard v15 (`:15` tag), 51820/udp, UI 51821. See "wg-easy" below | LAN/VPN only: `http://192.168.1.101:51821`. No Traefik route (v15 can't run under a subpath, wg-easy#1802) |
+| dashboard | `infra-dashboard`, nginx:alpine serving `html/` (mounted ro, edits are live). Infra links (LAN/VPN URLs) are hand-written in `html/services.js`; apps are discovered in JS from the Traefik API | `/infra/` (basicAuth `services@file`), plus `/infra/api/*` → `api@internal` (read-only Traefik API, same auth) |
 | privacy-policy | Go + distroless, serves `policies/*.md` (mounted ro) | `/privacy-policy` (strip), also host 4100 |
 | update-ddns | **not a container**: host bash + crontab every 2 min (`src/get-external-ip.sh` → on IP change, `update-ddns.sh` calls the IONOS DynamicDNS API). Install via `src/manage-get-external-ip-cron.sh` | — |
 | waha | only `.env` + `sessions/` (root-owned). No compose here | — |
+
+## wg-easy (v15)
+- Almost all config (clients, keys, hooks, allowed IPs, DNS) lives in the SQLite DB in `infra/wg-easy/wg-easy/` (secret dir, don't read it). Env vars only cover: `INSECURE`, `PORT`, `HOST`, `DISABLE_IPV6`, `DISABLE_VERSION_CHECK`, and `INIT_*` (unattended setup, used **only on first start with an empty DB**). `WG_*` vars are v14-only and ignored. Recreating the DB = new server keys, every client must be re-imported, so back up that dir.
+- `INIT_*` in `compose.yaml`: host `danilocatone.com`, port 51820, DNS 1.1.1.1, 10.8.0.0/24, split tunnel `INIT_ALLOWED_IPS=10.8.0.0/24,192.168.1.0/24`. `INIT_USERNAME`/`INIT_PASSWORD` come from `infra/wg-easy/.env` (git-ignored, see `.env.sample`).
+- Networking: the container is on `traefik-network` (eth0) and its own `wg` net (eth1, 10.42.42.0/24). `gw_priority: 1` on `traefik-network` makes eth0 the default route. That matters because the default v15 PostUp hook only MASQUERADEs `-o eth0`; without it VPN→internet/LAN traffic left via eth1 un-NATed and was dropped. Hooks in the DB were also changed to `! -o wg0`.
+- Sidecar `wg-easy-setup` (adds a LAN MASQUERADE on eth1) is now redundant and loses its rule whenever wg-easy restarts.
+- Changes need `docker compose up -d` in `infra/wg-easy` (VPN drops for a few seconds). Debug: `docker exec wg-easy sh -c 'ip route; iptables -t nat -S; wg show wg0'` (filter out keys).
 
 ## Apps (current)
 - `portfolio` (repo catonzio/portfolio): Bun/Svelte/TS + postgres16 (`portfolio`, `portfolio-db`). `/portfolio` is the site root.
@@ -64,6 +73,7 @@ Everything runs in Docker Compose behind Traefik. Root repo: `git@github.com:cat
 7. When unsure about intent or about anything destructive, ask the user (in Italian) instead of guessing.
 
 ## Notes
-- Known committed secrets: the pi-hole web password in `infra/pi-hole/compose.yaml` and the basicAuth hash in `traefik_dynamic.yml`. The root `.gitignore` does **not** ignore `.env` globally, so check `git status` for untracked env files before proposing a commit.
-- Escape `$` as `$$` in compose labels (bcrypt hashes).
+- Known committed secrets: the pi-hole web password in `infra/pi-hole/compose.yaml` (an old, never-valid basicAuth hash is still in git history). The root `.gitignore` does **not** ignore `.env` globally (only `infra/traefik/.env` and `infra/wg-easy/.env`), so check `git status` for untracked env files before proposing a commit.
+- Escape `$` as `$$` **only in compose files** (labels/environment). In `traefik_dynamic.yml` and in `.env` values `$$` stays literal and breaks bcrypt hashes.
+- Server LAN IP: `192.168.1.101`. Subdomains (`*.danilocatone.com`) have no DNS records; only the apex resolves.
 - Debug routing: `docker logs traefik 2>&1 | grep -i <x>` and the dashboard at :8081. Check the cert with `openssl s_client -connect localhost:443 -servername danilocatone.com`.

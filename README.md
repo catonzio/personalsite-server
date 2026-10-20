@@ -22,7 +22,8 @@ Home server on a laptop (Dell XPS 13 7390, Ubuntu) serving `danilocatone.com`. E
     ├── traefik/              # Reverse proxy + ACME (traefik.yml, traefik_dynamic.yml, .env, letsencrypt/)
     ├── portainer/            # Docker UI
     ├── pi-hole/              # LAN DNS
-    ├── wg-easy/              # WireGuard VPN
+    ├── wg-easy/              # WireGuard VPN (split tunnel)
+    ├── dashboard/            # Launcher page at /infra (nginx, static html/)
     ├── privacy-policy/       # Go server for the privacy policies (policies/*.md)
     ├── update-ddns/          # Host cron script: updates IONOS DynamicDNS on IP change
     └── waha/                 # WhatsApp HTTP API data (env + sessions only)
@@ -41,15 +42,55 @@ Without the script, start Traefik first (it creates the shared `traefik-network`
 
 ## 🌐 Accessing Services
 
+**Start from the infra dashboard: <https://danilocatone.com/infra/>** (basic auth). It links every service, so there is no need to remember ports.
+
 | Service | URL |
 |---------|-----|
+| Infra dashboard | <https://danilocatone.com/infra/> (basic auth) |
 | Portfolio (also `/`) | <https://danilocatone.com/portfolio/> |
 | Other apps | `https://danilocatone.com/<app>/` (wedding-photos, whatsapp-assistant, prova, dls-platform, ...) |
 | Privacy policies | <https://danilocatone.com/privacy-policy/> |
-| Traefik dashboard | <https://traefik.danilocatone.com> (basic auth), or `http://<server>:8081` on LAN (no auth) |
-| Portainer | `https://<server>:9443` / `http://<server>:9000` |
-| Pi-hole admin | `http://<server>:8080/admin` |
-| wg-easy UI | `http://<server>:51821` (VPN on 51820/udp) |
+| Traefik dashboard | `http://192.168.1.101:8081` (LAN/VPN, no auth) |
+| Portainer | `https://192.168.1.101:9443` / `http://192.168.1.101:9000` |
+| Pi-hole admin | `http://192.168.1.101:8080/admin` |
+| wg-easy UI | `http://192.168.1.101:51821` (VPN on 51820/udp) |
+
+`192.168.1.101` is the server on the home LAN: these URLs work from home or through the VPN.
+
+## 🧭 Infra Dashboard (`infra/dashboard`)
+
+A static page (nginx + HTML/CSS/JS) at `/infra/`, protected by the `services` basic auth.
+
+- **Infrastructure**: hand-written list in `infra/dashboard/html/services.js` (wg-easy, Portainer, Pi-hole, Traefik) with LAN URLs built from `LAN_HOST`. Edit the file and reload, no restart needed.
+- **Apps**: discovered automatically. The page reads the routers from the Traefik API (exposed read-only at `/infra/api/*`, same auth) and shows one card per top-level path. A new app with Traefik labels shows up by itself; a stopped app disappears. Apps whose routers use a basic auth middleware get a "login" badge.
+
+Services without Traefik routes (wg-easy, Portainer, Pi-hole) open in a new tab instead of an iframe: an https page cannot embed `http://` LAN URLs, and their session cookies would not be sent inside a cross-site iframe.
+
+## 🔐 Basic Auth (`services` middleware)
+
+Used by `/infra`. The user and bcrypt hash live in `infra/traefik/.env`, not in the repo:
+
+```bash
+docker run --rm -it httpd:2.4-alpine htpasswd -nBC 12 <user>   # prompts for the password
+```
+
+Put the printed line in `infra/traefik/.env` **single-quoted, with single `$`**:
+
+```env
+TRAEFIK_BASIC_AUTH_USERS='<user>:$2y$12$...'
+```
+
+Then recreate Traefik (`cd infra/traefik && docker compose up -d`, every site is down for a few seconds). `traefik_dynamic.yml` reads it with `{{ env "TRAEFIK_BASIC_AUTH_USERS" }}`. Check: `curl -s localhost:8081/api/http/middlewares/services@file` must report `"status":"enabled"`.
+
+## 🔒 VPN (`infra/wg-easy`)
+
+wg-easy v15. Clients use a **split tunnel**: only `10.8.0.0/24` (VPN) and `192.168.1.0/24` (home LAN) go through the tunnel, while normal internet traffic stays on the client's own connection.
+
+- Clients, keys, hooks and allowed IPs are stored in the wg-easy database (`infra/wg-easy/wg-easy/`, git-ignored). **Back up that dir**: losing it means new server keys and re-importing every client.
+- The `INIT_*` variables in `compose.yaml` only apply on the first start with an empty database. Admin credentials come from `infra/wg-easy/.env` (see `.env.sample`).
+- Allowed IPs of an existing client are changed in the UI; then re-import the config/QR on the device.
+- `gw_priority: 1` on `traefik-network` makes it the container's default route, where wg-easy's NAT rule applies. Without it, VPN traffic to the internet/LAN is dropped.
+- wg-easy v15 cannot run under a subpath, so it has no Traefik route: use the LAN URL.
 
 ## 🎮 Management Script
 
@@ -85,7 +126,7 @@ How the pieces fit together:
 | `infra/traefik/traefik.yml` | Defines the `letsencrypt` resolver: account email, DNS provider name, storage |
 | `infra/traefik/traefik_dynamic.yml` | The `api` router requests the certificate (`certResolver` + `domains`). All other routers use it through SNI matching |
 | `infra/traefik/docker-compose.yml` | Passes the provider credentials to the container and mounts `./letsencrypt` |
-| `infra/traefik/.env` | Provider API keys (git-ignored) |
+| `infra/traefik/.env` | Provider API keys + basic auth users (git-ignored) |
 | `infra/traefik/letsencrypt/acme.json` | Issued certificate and account, managed by Traefik (git-ignored) |
 
 Traefik checks every 24 hours and renews 30 days before expiry. Nothing has to be done manually.
@@ -146,7 +187,7 @@ If your provider has no API (or you do not need a wildcard) use the HTTP challen
 
 - Entrypoints: `web` (:80, permanent redirect to HTTPS) and `websecure` (:443).
 - Providers: Docker labels (`exposedByDefault=false`) + file provider (`infra/traefik/traefik_dynamic.yml`, hot reloaded).
-- `traefik_dynamic.yml` holds the `root-redirect` router (`/` → `/portfolio/`), the dashboard router `api` (`traefik.danilocatone.com`, basic auth) and shared middlewares.
+- `traefik_dynamic.yml` holds the `root-redirect` router (`/` → `/portfolio/`), the `api` router (on `traefik.danilocatone.com`, which has no DNS record: it is kept only to request the wildcard certificate) and shared middlewares (`services` basic auth, `compress`, `hsts`).
 - Networks: shared external `traefik-network` + a private network per app (DBs stay off `traefik-network`).
 
 Label template for an app (current convention):

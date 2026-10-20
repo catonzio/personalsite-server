@@ -29,7 +29,8 @@ In our setup (Traefik v2.11), Traefik:
 - **Reverse Proxy + TLS termination**: Listens on `80` (permanent redirect to HTTPS) and `443`, and serves a Let's Encrypt wildcard certificate for `danilocatone.com` / `*.danilocatone.com`
 - **Path-Based Routing**: One host, one path per app: `https://danilocatone.com/portfolio`, `/prova`, `/privacy-policy`, ...
 - **Auto-Discovery**: Detects new Docker containers via labels (docker provider) and loads shared routers/middlewares/TLS options from a file (file provider)
-- **Dashboard**: Web UI at `https://traefik.danilocatone.com` (basicAuth) and at `http://<host>:8081` (currently no auth, see [Security](#security-best-practices))
+- **Dashboard**: Web UI at `http://192.168.1.101:8081` (LAN/VPN, no auth, see [Security](#security-best-practices)). The `api` router on `traefik.danilocatone.com` exists, but that hostname has no DNS record
+- **Infra dashboard**: launcher page at `https://danilocatone.com/infra/` (basicAuth) that lists apps by reading the Traefik API (see [Infra dashboard](#infra-dashboard-infradashboard))
 
 ### Key Benefits
 
@@ -63,9 +64,10 @@ Internet / LAN
 │   /prova, /prova/api → prova fe / be                         │
 │   dls-platform(-staging), dls-platform-webapp(-staging)      │
 │   /privacy-policy   → privacy-policy                         │
-│   /wg-easy          → wg-easy                                │
+│   /infra            → infra-dashboard (basicAuth)            │
+│   /infra/api        → api@internal    (basicAuth, read-only) │
 │   /  → redirect to /portfolio/   (root-redirect router)      │
-│   traefik.danilocatone.com → api@internal (basicAuth)        │
+│   traefik.danilocatone.com → api@internal (no DNS record)    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -144,7 +146,7 @@ log:
 
 ### 2. `traefik/traefik_dynamic.yml` (Dynamic Configuration)
 
-Loaded by the file provider and **hot-reloaded** (no restart needed, but a bad edit breaks every route). The bcrypt hash is redacted here.
+Loaded by the file provider and **hot-reloaded** (no restart needed, but a bad edit breaks every route). The file is a Go template (Sprig functions available): the basicAuth users are read from an environment variable, so no hash is committed.
 
 ```yaml
 http:
@@ -152,7 +154,8 @@ http:
     services:
       basicAuth:
         users:
-          - 'dcatone:<bcrypt-hash>'
+          # htpasswd line ("user:$2y$..."), from TRAEFIK_BASIC_AUTH_USERS in ./.env
+          - '{{ env "TRAEFIK_BASIC_AUTH_USERS" }}'
     compress:
       compress: {}
     hsts:
@@ -202,8 +205,8 @@ tls:
 | Item | Purpose |
 | ---- | ------- |
 | router `root-redirect` | `/` redirects to `/portfolio/` (priority 1, lowest) |
-| router `api` | Dashboard at `traefik.danilocatone.com` behind `services`; the only router that requests the wildcard certificate |
-| middleware `services` | basicAuth (user `dcatone`); `$` is escaped as `$$` in this file |
+| router `api` | Dashboard at `traefik.danilocatone.com` behind `services` (hostname has no DNS record); kept because it is the only router that requests the wildcard certificate |
+| middleware `services` | basicAuth, users from `TRAEFIK_BASIC_AUTH_USERS` (see [Basic Auth](#middleware-basic-auth)). Used by `/infra` and `/infra/api`. Do **not** write `$$` in this file: it is not unescaped here |
 | middlewares `compress`, `hsts` | Defined but **not attached to any router yet** |
 | middleware `redirect-to-portfolio` | Used by `root-redirect` |
 | `tls.options.default` | Three ECDHE cipher suites and `sniStrict: true`: a request without a matching SNI hostname fails the TLS handshake (so `https://localhost` does not work) |
@@ -225,6 +228,9 @@ services:
     environment:
       # IONOS DNS API key is "<public prefix>.<secret>"; the parts come from ./.env
       - IONOS_API_KEY=${IONOS_PUBLIC_APIKEY}.${IONOS_PRIVATE_APIKEY}
+      # basicAuth for the "services" middleware (read by traefik_dynamic.yml).
+      # In .env, single-quote it and keep single "$": 'user:$2y$12$...'
+      - TRAEFIK_BASIC_AUTH_USERS=${TRAEFIK_BASIC_AUTH_USERS:?set TRAEFIK_BASIC_AUTH_USERS in .env}
     ports:
       - "${TRAEFIK_HTTP_PORT:-80}:80"           # HTTP entrypoint
       - "${TRAEFIK_HTTPS_PORT:-443}:443"        # HTTPS entrypoint
@@ -502,7 +508,7 @@ Only routes GET/POST requests to `api.example.com/v2/*`.
 
 ### View All Routes & Services
 
-**Dashboard**: Open `https://traefik.danilocatone.com` (basicAuth) or `http://localhost:8081` (no auth)
+**Dashboard**: Open `http://192.168.1.101:8081` (LAN/VPN, no auth), or `https://danilocatone.com/infra/` for the app launcher
 
 Navigate through:
 
@@ -811,13 +817,21 @@ labels:
 
 ### Middleware: Basic Auth
 
-Protect a service with username/password:
+**Shared `services` middleware (preferred)**: add `services@file` to a router's middlewares. Its users come from `infra/traefik/.env`:
 
 ```bash
-# Generate password (requires htpasswd from apache2-utils)
-htpasswd -nb admin secretpassword
-# Output: admin:$apr1$...
+# Generate a bcrypt line (htpasswd is not installed on the host); prompts for the password
+docker run --rm -it httpd:2.4-alpine htpasswd -nBC 12 <user>
 ```
+
+```env
+# infra/traefik/.env: single quotes, single "$"
+TRAEFIK_BASIC_AUTH_USERS='<user>:$2y$12$...'
+```
+
+Then recreate Traefik (`cd infra/traefik && docker compose up -d`, all routes down for a few seconds). Check it without printing the hash: `curl -s localhost:8081/api/http/middlewares/services@file` must show `"status":"enabled"`. A `disabled` status plus `error parsing BasicUser` in the logs means a malformed line (e.g. `$$`, or the username written twice).
+
+**Per-app middleware in labels** (e.g. dls staging):
 
 ```yaml
 labels:
@@ -963,6 +977,21 @@ labels:
 
 Already handled globally by the `web` entrypoint redirection in `traefik.yml`: no per-app redirect router or middleware is needed.
 
+### Infra dashboard (`infra/dashboard`)
+
+`infra-dashboard` (nginx:alpine, `html/` mounted read-only) uses two routers:
+
+| Router | Rule | Middlewares | Service |
+| ------ | ---- | ----------- | ------- |
+| `infra-dashboard` | ``PathPrefix(`/infra`)``, priority 50 | `infra-dashboard-slash`, `services@file`, `infra-dashboard-strip` | nginx :80 |
+| `infra-dashboard-api` | ``PathPrefix(`/infra/api/`)``, priority 60 | `services@file`, `infra-dashboard-strip` | `api@internal` |
+
+The page calls `api/http/routers` (same origin and same basicAuth session). It takes the first path segment of every enabled `Path`/`PathPrefix` rule, skips `@internal` routers and the `api`, `infra`, `dashboard` paths, and shows one card per app. Apps that are not routed by Traefik (wg-easy, Portainer, Pi-hole, the Traefik dashboard) are listed by hand in `html/services.js` with LAN URLs.
+
+### Apps that cannot run under a subpath
+
+Some UIs (wg-easy v15, Portainer) hard-code absolute redirects and cookie paths, so `PathPrefix` + strip breaks login. Options: a subdomain (needs a DNS record, e.g. a `CNAME` to `danilocatone.com`; the wildcard certificate already covers it), or LAN/VPN-only access linked from the infra dashboard (current choice).
+
 ---
 
 ## Security Best Practices
@@ -973,7 +1002,8 @@ Already handled globally by the `web` entrypoint redirection in `traefik.yml`: n
 | ---- | ----- |
 | HTTPS + HTTP redirect | Done (`web` permanently redirects to `websecure`) |
 | Let's Encrypt | Done (wildcard via DNS-01, see below) |
-| Dashboard | Behind basicAuth at `https://traefik.danilocatone.com`, but **still open without auth on host `:8081`** (`api.insecure: true`). To-do: set `insecure: false` or stop publishing 8081 |
+| Dashboard | **Open without auth on host `:8081`** (`api.insecure: true`; the `traefik.danilocatone.com` router has no DNS record). The read-only API is also exposed at `/infra/api/*` behind basicAuth. To-do: set `insecure: false` or stop publishing 8081 |
+| basicAuth | Users loaded from `infra/traefik/.env`, nothing committed |
 | Docker socket | Mounted read-only into Traefik. To-do: socket proxy |
 | Security headers / compression | `hsts` and `compress` middlewares are defined but **not attached to any router**. To-do |
 | Access log | Not enabled. To-do |
@@ -1069,7 +1099,7 @@ networks:
 
 ```bash
 # View dashboard
-open http://localhost:8081   # or https://traefik.danilocatone.com (basicAuth)
+open http://localhost:8081   # or https://danilocatone.com/infra/ (launcher, basicAuth)
 
 # Test routing
 curl https://danilocatone.com/portfolio/
@@ -1142,6 +1172,7 @@ Not in dashboard?
 - [traefik.yml](traefik/traefik.yml) - Static configuration
 - [traefik_dynamic.yml](traefik/traefik_dynamic.yml) - Dynamic configuration
 - [docker-compose.yml](traefik/docker-compose.yml) - Container definition
+- [dashboard/compose.yaml](dashboard/compose.yaml) / [dashboard/html/services.js](dashboard/html/services.js) - Infra launcher page
 
 ### Example Configurations
 
@@ -1153,6 +1184,6 @@ See existing apps for working examples:
 
 ---
 
-**Last Updated**: October 20, 2026  
+**Last Updated**: October 21, 2026  
 **Traefik Version**: v2.11  
 **Maintained by**: Personal Server Project
