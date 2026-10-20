@@ -1,0 +1,28 @@
+services:
+  infra-dashboard:
+    image: nginx:1.27-alpine
+    container_name: infra-dashboard
+    restart: unless-stopped
+    networks:
+      - traefik-network
+    volumes:
+      # Static launcher page; edit html/services.js, no restart needed.
+      - ./html:/usr/share/nginx/html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.infra-dashboard.rule=PathPrefix(`/infra`)"
+      - "traefik.http.routers.infra-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.infra-dashboard.tls=true"
+      - "traefik.http.routers.infra-dashboard.priority=50"
+      - "traefik.http.middlewares.infra-dashboard-slash.redirectregex.regex=^https?://([^/]+)/infra$$"
+      - "traefik.http.middlewares.infra-dashboard-slash.redirectregex.replacement=https://$${1}/infra/"
+      - "traefik.http.middlewares.infra-dashboard-slash.redirectregex.permanent=true"
+      - "traefik.http.middlewares.infra-dashboard-strip.stripprefix.prefixes=/infra"
+      # services@file = basicAuth defined in infra/traefik/traefik_dynamic.yml
+      - "traefik.http.routers.infra-dashboard.middlewares=infra-dashboard-slash,services@file,infra-dashboard-strip"
+      - "traefik.http.services.infra-dashboard.loadbalancer.server.port=80"
+
+networks:
+  traefik-network:
+    external: true

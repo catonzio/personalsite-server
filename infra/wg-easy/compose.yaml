@@ -32,15 +32,9 @@ services:
       # - WG_POST_UP=iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth1 -j MASQUERADE; iptables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT
       # NOTE: WG_* vars are v14-only and ignored by v15 (hooks live in the DB).
       # - WG_POST_DOWN=iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o eth1 -j MASQUERADE; iptables -D INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT
-    labels:
-      - "traefik.enable=true"
-      # - "traefik.http.routers.wg-easy.rule=Host(`danilocatone.com`)"
-      - "traefik.http.routers.wg-easy.rule=PathPrefix(`/wg-easy`)"
-      - "traefik.http.routers.wg-easy.entrypoints=web,websecure"
-      # - "traefik.http.routers.wg-easy.service=wg-easy"
-      - "traefik.http.routers.prova-api.tls=true"
-      - "traefik.http.services.wg-easy.loadbalancer.server.port=51821"
-      - "traefik.docker.network=traefik-network"
+    # No Traefik route: wg-easy v15 can't be served under a subpath
+    # (wg-easy/wg-easy#1802). UI is reachable on LAN/VPN at :51821,
+    # linked from the infra dashboard (/infra).
     volumes:
       - ./wg-easy:/etc/wireguard
       - /lib/modules:/lib/modules:ro

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Home server</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Home server</h1>
+      <p class="sub">danilocatone.com</p>
+    </header>
+    <div id="groups"></div>
+  </main>
+  <script src="services.js"></script>
+  <script>
+    function urlFor(s) {
+      if (s.lan) return `${s.scheme}://${LAN_HOST}:${s.port}${s.path}`;
+      return `${location.origin}${s.path}`;
+    }
+
+    const root = document.getElementById("groups");
+    for (const g of GROUPS) {
+      const section = document.createElement("section");
+      const h2 = document.createElement("h2");
+      h2.textContent = g.title;
+      const note = document.createElement("span");
+      note.className = "note";
+      note.textContent = g.note || "";
+      h2.append(note);
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      for (const s of g.services) {
+        const url = urlFor(s);
+        const a = document.createElement("a");
+        a.className = "card";
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.innerHTML = '<span class="name"></span><span class="desc"></span><span class="url"></span>';
+        a.querySelector(".name").textContent = s.name;
+        a.querySelector(".desc").textContent = s.desc || "";
+        a.querySelector(".url").textContent = url.replace(/^https?:\/\//, "");
+        grid.append(a);
+      }
+      section.append(h2, grid);
+      root.append(section);
+    }
+  </script>
+</body>
+</html>
