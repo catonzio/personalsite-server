@@ -3,7 +3,8 @@ http:
     services:
       basicAuth:
         users:
-          - 'dcatone:$$2a$$12$$Y2doS5wA6bupm2YJ.e1UuunCDRtLaPgPcte6pHLJl52SpQU7MzhGe' # bcrypt hash of your password
+          # htpasswd line ("user:$2y$..."), from TRAEFIK_BASIC_AUTH_USERS in ./.env
+          - '{{ env "TRAEFIK_BASIC_AUTH_USERS" }}'
     compress:
       compress: {}
     hsts:
