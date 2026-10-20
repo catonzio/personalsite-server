@@ -24,19 +24,19 @@
 
 ### Role in This Project
 
-In our setup, Traefik:
+In our setup (Traefik v2.11), Traefik:
 
-- **Reverse Proxy**: Routes all HTTP traffic from port `8080` to appropriate backend services
-- **Path-Based Routing**: Routes requests like `/portfolio` to the portfolio app, `/small-games` to games app
-- **Auto-Discovery**: Automatically detects new Docker containers via labels (no manual config changes)
-- **Dashboard**: Provides a web UI at port `8081` to monitor all routes and services
+- **Reverse Proxy + TLS termination**: Listens on `80` (permanent redirect to HTTPS) and `443`, and serves a Let's Encrypt wildcard certificate for `danilocatone.com` / `*.danilocatone.com`
+- **Path-Based Routing**: One host, one path per app: `https://danilocatone.com/portfolio`, `/prova`, `/privacy-policy`, ...
+- **Auto-Discovery**: Detects new Docker containers via labels (docker provider) and loads shared routers/middlewares/TLS options from a file (file provider)
+- **Dashboard**: Web UI at `https://traefik.danilocatone.com` (basicAuth) and at `http://<host>:8081` (currently no auth, see [Security](#security-best-practices))
 
 ### Key Benefits
 
-✅ **No manual configuration**: Services register themselves via Docker labels  
-✅ **Hot reload**: Changes detected automatically without restart  
-✅ **Single entry point**: All apps accessible via one port (8080)  
-✅ **Service isolation**: Each app maintains its own network while sharing Traefik network
+- **No manual configuration**: Services register themselves via Docker labels
+- **Hot reload**: Docker labels and `traefik_dynamic.yml` are picked up without a restart
+- **Single entry point**: All apps are reachable via `https://danilocatone.com/<app>`
+- **Service isolation**: Each app keeps its own network while sharing `traefik-network`
 
 ---
 
@@ -45,40 +45,38 @@ In our setup, Traefik:
 ### Network Topology
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                        Host Machine                         │
-│                                                             │
-│  Browser ──────→ localhost:8080 (Traefik HTTP)              │
-│                         │                                   │
-│                         ↓                                   │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              Traefik Container                       │   │
-│  │  • Routes /portfolio → portfolio-app:8000            │   │
-│  │  • Routes /small-games → small-games-app:8000        │   │
-│  │  • Routes /sette-mezzo → sette-mezzo-be:8000         │   │
-│  │  • Dashboard at localhost:8081                       │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                         │                                   │
-│                         ↓                                   │
-│         ┌─────────────────────────────────────┐             │
-│         │     traefik-network (bridge)        │             │
-│         │                                     │             │
-│    ┌────┴────┐    ┌───────┴───────┐    ┌──────┴─────┐       │
-│    │portfolio│    │ small-games   │    │sette-mezzo │       │
-│    │   app   │    │      app      │    │     be     │       │
-│    │  :8000  │    │     :8000     │    │   :8000    │       │
-│    └─────────┘    └───────────────┘    └────────────┘       │
-└─────────────────────────────────────────────────────────────┘
+Internet / LAN
+      │  https://danilocatone.com/<app>
+      ↓
+┌──────────────────────────────────────────────────────────────┐
+│ Host (80, 443, dashboard 8081)                               │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Traefik v2.11                                          │  │
+│  │  web :80 ──(301 → https)──→ websecure :443 (TLS, SNI)  │  │
+│  │  providers: docker (labels) + file (traefik_dynamic)   │  │
+│  └─────────────────────────┬──────────────────────────────┘  │
+│                            ↓                                 │
+│              traefik-network (bridge)                        │
+│   /portfolio        → portfolio                              │
+│   /wedding-photos   → wedding-photos                         │
+│   /whatsapp-assistant → wa-ass                               │
+│   /prova, /prova/api → prova fe / be                         │
+│   dls-platform(-staging), dls-platform-webapp(-staging)      │
+│   /privacy-policy   → privacy-policy                         │
+│   /wg-easy          → wg-easy                                │
+│   /  → redirect to /portfolio/   (root-redirect router)      │
+│   traefik.danilocatone.com → api@internal (basicAuth)        │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Traffic Flow
 
-1. **Request arrives**: Browser requests `http://localhost:8080/portfolio/info`
-2. **Traefik receives**: Request hits Traefik's `web` entrypoint (port 80 inside container, mapped to 8080 on host)
-3. **Route matching**: Traefik matches `PathPrefix(/portfolio)` rule
-4. **Service lookup**: Routes to `portfolio` service on `traefik-network`
-5. **Backend forward**: Sends request to `portfolio-app:8000/portfolio/info`
-6. **Response**: FastAPI responds and Traefik forwards back to browser
+1. **Request arrives**: Browser requests `https://danilocatone.com/portfolio/info` (plain `http://` gets a permanent redirect to HTTPS)
+2. **Traefik receives**: Request hits the `websecure` entrypoint (443); the certificate is chosen by SNI
+3. **Route matching**: Traefik matches `PathPrefix(/portfolio)`
+4. **Middlewares**: `portfolio-slash` (adds a trailing slash when missing) and `portfolio-strip` (removes `/portfolio`)
+5. **Backend forward**: Sends `/info` to the `portfolio` container on `traefik-network`
+6. **Response**: The app responds and Traefik forwards it back to the browser
 
 ---
 
@@ -86,29 +84,51 @@ In our setup, Traefik:
 
 ### 1. `traefik/traefik.yml` (Static Configuration)
 
-Static configuration loaded at startup. Changes require container restart.
+Static configuration loaded at startup. Changes require a container restart.
 
 ```yaml
-# API & Dashboard
 api:
-  dashboard: true       # Enable web dashboard
-  insecure: true       # Allow access without auth (dev only!)
+  dashboard: true
+  insecure: true # Dashboard without auth on host :8081
 
-# Entry Points (ports Traefik listens on)
 entryPoints:
   web:
-    address: ":80"     # HTTP traffic (internal port 80)
+    address: ":80"
+    # Redirect HTTP to HTTPS
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
 
-# Service Discovery
+  websecure:
+    address: ":443"
+
 providers:
   docker:
-    endpoint: "unix:///var/run/docker.sock"  # Docker socket access
-    exposedByDefault: false                  # Only expose labeled containers
-    watch: true                              # Auto-detect new containers
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false # Only services with traefik.enable=true
+    watch: true # Auto-discover new containers
 
-# Logging
+  file:
+    directory: /etc/traefik/conf.d
+    watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: danilocatone@gmail.com
+      storage: /letsencrypt/acme.json
+      # DNS-01 through the IONOS DNS API (needed for the wildcard certificate)
+      dnsChallenge:
+        provider: ionos
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
+
 log:
-  level: INFO          # Options: DEBUG, INFO, WARN, ERROR
+  level: INFO
 ```
 
 **Key Settings Explained:**
@@ -116,32 +136,108 @@ log:
 | Setting | Value | Purpose |
 | --------- | ------- | --------- |
 | `api.dashboard` | `true` | Enables the Traefik dashboard UI |
-| `api.insecure` | `true` | **⚠️ DEV ONLY**: Skips authentication. Never use in production! |
+| `api.insecure` | `true` | Exposes the dashboard on container port 8080 (host `8081`) **without auth** |
+| `entryPoints.web.http.redirections` | permanent to `websecure` | Every HTTP request is redirected to HTTPS |
 | `exposedByDefault` | `false` | Services must explicitly opt-in with `traefik.enable=true` |
-| `watch` | `true` | Continuously monitors Docker for container changes |
+| `providers.file.directory` | `/etc/traefik/conf.d` | Loads `traefik_dynamic.yml`, hot-reloaded |
+| `certificatesResolvers.letsencrypt` | DNS-01 / IONOS | Issues the wildcard certificate |
 
-### 2. `traefik/docker-compose.yml`
+### 2. `traefik/traefik_dynamic.yml` (Dynamic Configuration)
+
+Loaded by the file provider and **hot-reloaded** (no restart needed, but a bad edit breaks every route). The bcrypt hash is redacted here.
+
+```yaml
+http:
+  middlewares:
+    services:
+      basicAuth:
+        users:
+          - 'dcatone:<bcrypt-hash>'
+    compress:
+      compress: {}
+    hsts:
+      headers:
+        stsSeconds: 2592000
+    redirect-to-portfolio:
+      redirectRegex:
+        regex: "^https?://([^/]+)/?$"
+        replacement: "https://${1}/portfolio/"
+        permanent: true
+  routers:
+    root-redirect:
+      rule: "Path(`/`)"
+      entrypoints:
+        - websecure
+      middlewares:
+        - redirect-to-portfolio
+      service: api@internal
+      priority: 1
+      tls: {}
+    api:
+      rule: Host(`traefik.danilocatone.com`)
+      entrypoints:
+        - websecure
+      middlewares:
+        - services
+      service: api@internal
+      # This router requests the wildcard certificate; every other router is served
+      # with it automatically through SNI matching
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: danilocatone.com
+            sans:
+              - "*.danilocatone.com"
+
+tls:
+  options:
+    default:
+      cipherSuites:
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      sniStrict: true
+```
+
+| Item | Purpose |
+| ---- | ------- |
+| router `root-redirect` | `/` redirects to `/portfolio/` (priority 1, lowest) |
+| router `api` | Dashboard at `traefik.danilocatone.com` behind `services`; the only router that requests the wildcard certificate |
+| middleware `services` | basicAuth (user `dcatone`); `$` is escaped as `$$` in this file |
+| middlewares `compress`, `hsts` | Defined but **not attached to any router yet** |
+| middleware `redirect-to-portfolio` | Used by `root-redirect` |
+| `tls.options.default` | Three ECDHE cipher suites and `sniStrict: true`: a request without a matching SNI hostname fails the TLS handshake (so `https://localhost` does not work) |
+
+> Never add a static `defaultCertificate` for the domain: it blocks ACME.
+
+### 3. `traefik/docker-compose.yml`
 
 Container definition and port mappings.
 
 ```yaml
 services:
   traefik:
-    image: traefik:v2.10              # Traefik version
+    image: traefik:v2.11
     container_name: traefik
     restart: unless-stopped
     env_file:
-      - ../ports.env                  # Load port configuration
+      - ../ports.env
+    environment:
+      # IONOS DNS API key is "<public prefix>.<secret>"; the parts come from ./.env
+      - IONOS_API_KEY=${IONOS_PUBLIC_APIKEY}.${IONOS_PRIVATE_APIKEY}
     ports:
-      - "${TRAEFIK_HTTP_PORT:-8080}:80"        # HTTP: host:container
-      - "${TRAEFIK_DASHBOARD_PORT:-8081}:8080" # Dashboard: host:container
+      - "${TRAEFIK_HTTP_PORT:-80}:80"           # HTTP entrypoint
+      - "${TRAEFIK_HTTPS_PORT:-443}:443"        # HTTPS entrypoint
+      - "${TRAEFIK_DASHBOARD_PORT:-8081}:8080"  # Traefik dashboard
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker API access
-      - ./traefik.yml:/etc/traefik/traefik.yml:ro     # Static config
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket for auto-discovery
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik_dynamic.yml:/etc/traefik/conf.d/traefik_dynamic.yml:ro  # Dynamic configuration
+      - ./letsencrypt:/letsencrypt  # ACME storage (acme.json)
     networks:
-      - traefik-network               # Shared network with apps
+      - traefik-network
     labels:
-      - "traefik.enable=true"         # Enable Traefik for itself
+      - "traefik.enable=true"
 
 networks:
   traefik-network:
@@ -153,17 +249,24 @@ networks:
 
 | Host Port | Container Port | Purpose |
 | --------- | -------------- | ------- |
-| `8080` | `80` | Main HTTP entrypoint for all apps |
-| `8081` | `8080` | Traefik dashboard and API |
+| `80` | `80` | `web`: redirects to HTTPS |
+| `443` | `443` | `websecure`: all apps |
+| `8081` | `8080` | Dashboard and API (`api.insecure`, no auth) |
 
-### 3. `infra/ports.env`
+Host `8080` is **not** Traefik any more: it belongs to pi-hole's web UI.
 
-Centralized port configuration:
+### 4. `infra/ports.env`
+
+Centralized port configuration (ports only, no secrets):
 
 ```bash
-TRAEFIK_HTTP_PORT=8080           # Main entry point (change if 8080 conflicts)
-TRAEFIK_DASHBOARD_PORT=8081      # Dashboard port
-APP_INTERNAL_PORT=8000           # Internal port all FastAPI apps use
+TRAEFIK_DOMAIN=danilocatone.com
+TRAEFIK_HTTP_PORT=80
+TRAEFIK_HTTPS_PORT=443
+TRAEFIK_DASHBOARD_PORT=8081
+PORTAINER_HTTP_PORT=9000
+PORTAINER_HTTPS_PORT=9443
+APP_INTERNAL_PORT=8000           # Internal port used by the FastAPI apps
 ```
 
 ---
@@ -183,25 +286,35 @@ labels:
 
 This single label tells Traefik: "This container should be discoverable."
 
-### Complete Label Set (Recommended)
+### Complete Label Set (Convention)
 
-For full control over routing:
+This server uses **path-based routing on one host** (not subdomains). Template:
 
 ```yaml
 labels:
-  # Enable Traefik for this container
   - "traefik.enable=true"
-  
-  # Define a router named "portfolio"
-  - "traefik.http.routers.portfolio.rule=PathPrefix(`/portfolio`)"
-  - "traefik.http.routers.portfolio.entrypoints=web"
-  
-  # Define a service named "portfolio"
-  - "traefik.http.services.portfolio.loadbalancer.server.port=8000"
-  
-  # Specify which network Traefik should use
   - "traefik.docker.network=traefik-network"
+  - "traefik.http.routers.<app>.rule=PathPrefix(`/<app>`)"
+  - "traefik.http.routers.<app>.entrypoints=websecure"
+  - "traefik.http.routers.<app>.tls=true"
+  - "traefik.http.routers.<app>.middlewares=<app>-slash,<app>-strip"
+  # <app>-slash: add the trailing slash
+  - "traefik.http.middlewares.<app>-slash.redirectregex.regex=^https?://([^/]+)/<app>$$"
+  - "traefik.http.middlewares.<app>-slash.redirectregex.replacement=https://$${1}/<app>/"
+  - "traefik.http.middlewares.<app>-slash.redirectregex.permanent=true"
+  # <app>-strip: remove the prefix before forwarding
+  - "traefik.http.middlewares.<app>-strip.stripprefix.prefixes=/<app>"
+  - "traefik.http.services.<app>.loadbalancer.server.port=<internal port>"
 ```
+
+Notes:
+
+- `entrypoints=websecure` is enough: `web` already redirects to HTTPS (older apps still list `web,websecure`, which is harmless).
+- `tls=true` with **no** `certresolver`: the wildcard certificate is requested only by the `api` router and every other router gets it via SNI.
+- Router and middleware names are **global across all stacks**, so they must be unique.
+- Escape `$` as `$$` in compose labels.
+- **Strip prefix OR app-side base path, not both.** With `<app>-strip` the app sees `/` and needs no configuration. The alternative is to skip the strip middleware and make the app aware of the prefix (e.g. FastAPI `root_path="/<app>"`; wedding-photos has no strip).
+- Priorities: API routers 100, frontends 50, `root-redirect` 1.
 
 ### Label Breakdown
 
@@ -211,20 +324,22 @@ labels:
 - "traefik.enable=true"
 ```
 
-**Required**: Without this, Traefik ignores the container (when `exposedByDefault=false`).
+**Required**: Without this, Traefik ignores the container (`exposedByDefault=false`).
 
 #### 2. Router Configuration
 
 ```yaml
 - "traefik.http.routers.{router-name}.rule=PathPrefix(`/path`)"
-- "traefik.http.routers.{router-name}.entrypoints=web"
+- "traefik.http.routers.{router-name}.entrypoints=websecure"
+- "traefik.http.routers.{router-name}.tls=true"
 ```
 
 **Router**: Defines how requests are matched and routed.
 
 - `{router-name}`: Unique identifier (usually matches service name)
 - `.rule`: Matching criteria (see [Routing Rules](#routing-rules))
-- `.entrypoints`: Which entrypoint(s) to listen on (`web` = port 80)
+- `.entrypoints`: Which entrypoint(s) to listen on (`websecure` = port 443)
+- `.tls`: Terminate TLS with the certificate matched by SNI
 
 #### 3. Service Configuration
 
@@ -232,7 +347,7 @@ labels:
 - "traefik.http.services.{service-name}.loadbalancer.server.port=8000"
 ```
 
-**Service**: The backend service Traefik forwards traffic to.
+**Service**: The backend Traefik forwards traffic to.
 
 - `{service-name}`: Unique identifier (should match router name)
 - `.loadbalancer.server.port`: Port the app listens on **inside its container**
@@ -245,30 +360,14 @@ labels:
 
 **Important**: If your container is on multiple networks, this tells Traefik which one to use for routing.
 
-### Complete Example: Portfolio App
+### Real Examples
+
+See [apps/portfolio/docker-compose.yml](../apps/portfolio/docker-compose.yml) (app with strip prefix, `web,websecure`), [apps/prova/docker-compose.yml](../apps/prova/docker-compose.yml) (API + frontend with priorities) and [infra/privacy-policy/compose.yaml](privacy-policy/compose.yaml). Each stack must declare the shared network as external:
 
 ```yaml
-services:
-  portfolio:
-    build: .
-    container_name: portfolio-app
-    restart: unless-stopped
-    networks:
-      - portfolio-network      # Private network for app resources
-      - traefik-network        # Shared network for Traefik routing
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.portfolio.rule=PathPrefix(`/portfolio`)"
-      - "traefik.http.routers.portfolio.entrypoints=web"
-      - "traefik.http.services.portfolio.loadbalancer.server.port=8000"
-      - "traefik.docker.network=traefik-network"
-
 networks:
-  portfolio-network:
-    name: portfolio-network
-    driver: bridge
   traefik-network:
-    external: true              # Must already exist (created by Traefik)
+    external: true              # Created by the traefik stack: start it first
 ```
 
 ---
@@ -403,7 +502,7 @@ Only routes GET/POST requests to `api.example.com/v2/*`.
 
 ### View All Routes & Services
 
-**Dashboard**: Open browser to `http://localhost:8081`
+**Dashboard**: Open `https://traefik.danilocatone.com` (basicAuth) or `http://localhost:8081` (no auth)
 
 Navigate through:
 
@@ -425,13 +524,16 @@ docker inspect portfolio-app | grep -A 20 "Labels"
 
 ```bash
 # Test portfolio route
-curl http://localhost:8080/portfolio/health
+curl https://danilocatone.com/portfolio/
 
 # Test with verbose output
-curl -v http://localhost:8080/portfolio/
+curl -v https://danilocatone.com/portfolio/
+
+# Local test, bypassing DNS (sniStrict needs the hostname)
+curl -k --resolve danilocatone.com:443:127.0.0.1 https://danilocatone.com/portfolio/
 
 # Follow redirects
-curl -L http://localhost:8080/portfolio
+curl -L https://danilocatone.com/portfolio
 ```
 
 ### Hot Reload Configuration
@@ -540,22 +642,16 @@ docker logs traefik 2>&1 | grep -i "health"
 
    ```bash
    # If rule is PathPrefix(`/portfolio`)
-   curl http://localhost:8080/portfolio/  # ✅ Works
-   curl http://localhost:8080/portfolios/ # ❌ 404
+   curl https://danilocatone.com/portfolio/  # ✅ Works
+   curl https://danilocatone.com/portfolios/ # ❌ 404
    ```
 
-2. **Missing root_path in FastAPI**:
+2. **Prefix handling mismatch**: either the router strips the prefix (`<app>-strip`) and the app serves from `/`, or there is no strip middleware and the app must know its prefix (e.g. `FastAPI(root_path="/portfolio")`). Never both.
 
-   ```python
-   # app.py should have:
-   app = FastAPI(root_path="/portfolio")
-   ```
-
-3. **Wrong entrypoint**: Using HTTPS when only HTTP configured
+3. **TLS / SNI**: `sniStrict: true` rejects requests without a matching hostname, so `https://localhost/...` fails the handshake. Use the real hostname or `--resolve`:
 
    ```bash
-   curl http://localhost:8080/portfolio/  # ✅ Correct
-   curl https://localhost:8080/portfolio/ # ❌ Wrong
+   curl -k --resolve danilocatone.com:443:127.0.0.1 https://danilocatone.com/portfolio/
    ```
 
 ### Problem: 502 Bad Gateway
@@ -617,7 +713,7 @@ docker compose up -d --force-recreate
 
 # Wait 2-3 seconds for Traefik to detect
 sleep 3
-curl http://localhost:8080/portfolio/health
+curl https://danilocatone.com/portfolio/
 ```
 
 ### Debug Mode
@@ -683,7 +779,7 @@ Remove the path prefix before forwarding to backend:
 labels:
   - "traefik.enable=true"
   - "traefik.http.routers.app.rule=PathPrefix(`/api`)"
-  - "traefik.http.routers.app.entrypoints=web"
+  - "traefik.http.routers.app.entrypoints=websecure"
   
   # Create middleware to strip /api prefix
   - "traefik.http.middlewares.strip-api.stripprefix.prefixes=/api"
@@ -696,7 +792,7 @@ labels:
 
 **Example:**
 
-- Request: `http://localhost:8080/api/users`
+- Request: `https://danilocatone.com/api/users`
 - Backend receives: `/users` (prefix stripped)
 
 ### Middleware: Add Headers
@@ -761,7 +857,7 @@ labels:
   
   # Configure CORS
   - "traefik.http.middlewares.cors.headers.accesscontrolallowmethods=GET,POST,PUT,DELETE,OPTIONS"
-  - "traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist=http://localhost:3000,http://localhost:8080"
+  - "traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist=http://localhost:3000,https://danilocatone.com"
   - "traefik.http.middlewares.cors.headers.accesscontrolmaxage=100"
   - "traefik.http.middlewares.cors.headers.addvaryheader=true"
   
@@ -799,12 +895,12 @@ labels:
   
   # Router 1: /api path
   - "traefik.http.routers.app-api.rule=PathPrefix(`/api`)"
-  - "traefik.http.routers.app-api.entrypoints=web"
+  - "traefik.http.routers.app-api.entrypoints=websecure"
   - "traefik.http.routers.app-api.service=app-service"
   
   # Router 2: /admin path
   - "traefik.http.routers.app-admin.rule=PathPrefix(`/admin`)"
-  - "traefik.http.routers.app-admin.entrypoints=web"
+  - "traefik.http.routers.app-admin.entrypoints=websecure"
   - "traefik.http.routers.app-admin.middlewares=auth@docker"
   - "traefik.http.routers.app-admin.service=app-service"
   
@@ -865,87 +961,33 @@ labels:
 
 ### Redirect HTTP to HTTPS
 
-For production setups with HTTPS entrypoint:
-
-```yaml
-labels:
-  - "traefik.enable=true"
-  
-  # HTTP router redirects to HTTPS
-  - "traefik.http.routers.app-http.rule=PathPrefix(`/app`)"
-  - "traefik.http.routers.app-http.entrypoints=web"
-  - "traefik.http.routers.app-http.middlewares=redirect-to-https@docker"
-  
-  # HTTPS router (actual service)
-  - "traefik.http.routers.app.rule=PathPrefix(`/app`)"
-  - "traefik.http.routers.app.entrypoints=websecure"
-  - "traefik.http.routers.app.tls=true"
-  
-  # Redirect middleware
-  - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-  
-  - "traefik.http.services.app.loadbalancer.server.port=8000"
-```
+Already handled globally by the `web` entrypoint redirection in `traefik.yml`: no per-app redirect router or middleware is needed.
 
 ---
 
 ## Security Best Practices
 
-### ⚠️ Current Setup (Development Only!)
+### Current State
 
-The current configuration is **NOT secure for production**:
+| Area | State |
+| ---- | ----- |
+| HTTPS + HTTP redirect | Done (`web` permanently redirects to `websecure`) |
+| Let's Encrypt | Done (wildcard via DNS-01, see below) |
+| Dashboard | Behind basicAuth at `https://traefik.danilocatone.com`, but **still open without auth on host `:8081`** (`api.insecure: true`). To-do: set `insecure: false` or stop publishing 8081 |
+| Docker socket | Mounted read-only into Traefik. To-do: socket proxy |
+| Security headers / compression | `hsts` and `compress` middlewares are defined but **not attached to any router**. To-do |
+| Access log | Not enabled. To-do |
+| TLS options | `sniStrict: true` and three ECDHE cipher suites |
 
-```yaml
-# ❌ DEV ONLY! Insecure dashboard access
-api:
-  dashboard: true
-  insecure: true
-```
-
-### 🔒 Production Security Checklist
-
-Before deploying to production:
+### Production Security Checklist
 
 #### 1. Secure the Dashboard
 
-**Option A**: Disable completely
-
-```yaml
-api:
-  dashboard: false
-```
-
-**Option B**: Add authentication
-
-```yaml
-api:
-  dashboard: true
-  insecure: false    # Require secure access
-
-# Add basic auth via labels on Traefik itself
-labels:
-  - "traefik.http.routers.dashboard.rule=Host(`traefik.yourdomain.com`)"
-  - "traefik.http.routers.dashboard.service=api@internal"
-  - "traefik.http.routers.dashboard.middlewares=auth"
-  - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$..."
-```
+Either disable it (`api.dashboard: false`) or remove `insecure: true` (and the `8081` port mapping) so that it is only reachable through the `api` router, which is protected by the `services` basicAuth middleware.
 
 #### 2. Enable HTTPS
 
-Add HTTPS entrypoint:
-
-```yaml
-entryPoints:
-  web:
-    address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-  websecure:
-    address: ":443"
-```
+Already done: see `entryPoints` in [traefik.yml](traefik/traefik.yml).
 
 #### 3. Use Let's Encrypt
 
@@ -954,9 +996,9 @@ challenge on IONOS (wildcard `*.danilocatone.com`), and the `api` router in
 [traefik_dynamic.yml](traefik/traefik_dynamic.yml) requests the certificate. Traefik renews it by itself
 (30 days before expiry); it is stored in `traefik/letsencrypt/acme.json`. The IONOS API key
 (`IONOS_PUBLIC_APIKEY` / `IONOS_PRIVATE_APIKEY`) is read from `traefik/.env` (not committed; same keys as
-`update-ddns/.env`).
+`update-ddns/.env`). Do not delete `acme.json` lightly (Let's Encrypt rate limits).
 
-Generic example:
+Generic example (HTTP-01, for a single-host certificate):
 
 ```yaml
 certificatesResolvers:
@@ -968,85 +1010,53 @@ certificatesResolvers:
         entryPoint: web
 ```
 
-Then in containers:
-
-```yaml
-labels:
-  - "traefik.http.routers.app.tls=true"
-  - "traefik.http.routers.app.tls.certresolver=letsencrypt"
-```
-
 #### 4. Restrict Docker Socket Access
 
-The Docker socket is powerful. In production:
-
-- Use Docker Socket Proxy (e.g., Tecnativa's docker-socket-proxy)
-- Limit Traefik's Docker API access to read-only container info
+The Docker socket is powerful. Use a Docker Socket Proxy (e.g. Tecnativa's docker-socket-proxy) so that Traefik only gets read-only access to container info.
 
 #### 5. Set Security Headers
 
-Add security headers to all responses:
+Attach the existing `hsts` / `compress` middlewares to routers, e.g. `...middlewares=<app>-slash,<app>-strip,hsts@file,compress@file`, or define more headers:
 
 ```yaml
 labels:
-  # Security headers middleware
   - "traefik.http.middlewares.security.headers.framedeny=true"
-  - "traefik.http.middlewares.security.headers.sslredirect=true"
   - "traefik.http.middlewares.security.headers.stsSeconds=31536000"
   - "traefik.http.middlewares.security.headers.stsIncludeSubdomains=true"
-  - "traefik.http.middlewares.security.headers.stsPreload=true"
   - "traefik.http.middlewares.security.headers.contentTypeNosniff=true"
-  - "traefik.http.middlewares.security.headers.browserXssFilter=true"
-  
-  # Apply to all routers
-  - "traefik.http.routers.app.middlewares=security@docker"
 ```
 
 #### 6. Enable Access Logs
-
-Track all requests:
 
 ```yaml
 accessLog:
   filePath: "/var/log/traefik/access.log"
   format: json
   fields:
-    defaultMode: keep
     headers:
       defaultMode: drop    # Don't log sensitive headers
 ```
 
 #### 7. Filter by IP (if needed)
 
-Restrict access by source IP:
-
 ```yaml
 labels:
-  # Whitelist middleware
-  - "traefik.http.middlewares.ipwhitelist.ipwhitelist.sourcerange=192.168.1.0/24,10.0.0.0/8"
-  
-  # Apply to router
+  - "traefik.http.middlewares.ipwhitelist.ipwhitelist.sourcerange=192.168.1.0/24"
   - "traefik.http.routers.app.middlewares=ipwhitelist@docker"
 ```
 
 #### 8. Separate Networks
 
-Best practice: Isolate backend services
+Keep databases off `traefik-network`: put them only on the app's private network.
 
 ```yaml
 services:
   app:
-    networks:
-      - backend-network    # Private network with database
-      - traefik-network    # Only Traefik can access
-  
+    networks: [backend-network, traefik-network]
   database:
-    networks:
-      - backend-network    # NOT on traefik-network = not exposed
-
+    networks: [backend-network]   # NOT on traefik-network = not routable
 networks:
-  backend-network:
-    internal: true         # No external access
+  backend-network: {}
   traefik-network:
     external: true
 ```
@@ -1059,10 +1069,10 @@ networks:
 
 ```bash
 # View dashboard
-open http://localhost:8081
+open http://localhost:8081   # or https://traefik.danilocatone.com (basicAuth)
 
 # Test routing
-curl http://localhost:8080/portfolio/health
+curl https://danilocatone.com/portfolio/
 
 # View Traefik logs
 docker logs traefik -f
@@ -1079,18 +1089,7 @@ cd infra/traefik && docker compose restart
 
 ### Label Template
 
-Copy-paste template for new services:
-
-```yaml
-labels:
-  - "traefik.enable=true"
-  - "traefik.http.routers.{SERVICE}.rule=PathPrefix(`/{PATH}`)"
-  - "traefik.http.routers.{SERVICE}.entrypoints=web"
-  - "traefik.http.services.{SERVICE}.loadbalancer.server.port=8000"
-  - "traefik.docker.network=traefik-network"
-```
-
-Replace `{SERVICE}` with your service name and `{PATH}` with your URL path.
+See [Complete Label Set (Convention)](#complete-label-set-convention): replace `<app>` with your service name and `<internal port>` with the container port.
 
 ### Routing Rule Syntax
 
@@ -1107,7 +1106,7 @@ Replace `{SERVICE}` with your service name and `{PATH}` with your URL path.
 ```text
 404 Not Found?
   └─→ Check PathPrefix matches URL
-  └─→ Verify FastAPI root_path set correctly
+  └─→ Strip prefix OR app root_path (not both)
 
 502 Bad Gateway?
   └─→ Check backend app is running (docker logs)
@@ -1139,8 +1138,9 @@ Not in dashboard?
 ### Project-Specific Files
 
 - [Main README](../README.md) - Project overview and quick start
-- [ports.env](ports.env) - Port configuration
+- [ports.env](ports.env) / [ports.yml](ports.yml) - Port configuration and host port map
 - [traefik.yml](traefik/traefik.yml) - Static configuration
+- [traefik_dynamic.yml](traefik/traefik_dynamic.yml) - Dynamic configuration
 - [docker-compose.yml](traefik/docker-compose.yml) - Container definition
 
 ### Example Configurations
@@ -1148,11 +1148,11 @@ Not in dashboard?
 See existing apps for working examples:
 
 - [apps/portfolio/docker-compose.yml](../apps/portfolio/docker-compose.yml)
-- [apps/small-games/docker-compose.yml](../apps/small-games/docker-compose.yml)
-- [apps/sette-mezzo/be/docker-compose.yml](../apps/sette-mezzo/docker-compose.yml) (if exists)
+- [apps/prova/docker-compose.yml](../apps/prova/docker-compose.yml)
+- [infra/privacy-policy/compose.yaml](privacy-policy/compose.yaml)
 
 ---
 
-**Last Updated**: March 10, 2026  
-**Traefik Version**: v2.10  
+**Last Updated**: October 20, 2026  
+**Traefik Version**: v2.11  
 **Maintained by**: Personal Server Project

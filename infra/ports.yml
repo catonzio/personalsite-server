@@ -1,22 +1,44 @@
-# Centralized Port Configuration
-# This file documents all ports used across the infrastructure and applications
-# Actual configuration is in .env file
+# Host Port Map
+# Documents the ports published on the host by the infrastructure and applications.
+# Shared values live in infra/ports.env (Traefik, Portainer); the rest are set in each compose file.
 
 traefik:
-  http: 8080 # Main HTTP entrypoint (access apps via localhost:8080/app-name)
-  dashboard: 8081 # Traefik dashboard UI
+  http: 80 # web entrypoint, permanent redirect to https
+  https: 443 # websecure entrypoint (all apps: https://danilocatone.com/<app>)
+  dashboard: 8081 # container 8080, api.insecure: NO auth (also at https://traefik.danilocatone.com with basicAuth)
 
 portainer:
   http: 9000 # Portainer HTTP UI
   https: 9443 # Portainer HTTPS UI
 
+pi-hole:
+  dns: 53 # tcp + udp
+  web: 8080 # web UI (http), container 80
+  web_https: 4433 # web UI (https)
+
+wg-easy:
+  wireguard: 51820 # udp
+  ui: 51821 # tcp, web UI (also routed at /wg-easy)
+
+privacy-policy:
+  direct: 4100 # container 8080, bypasses Traefik (also at /privacy-policy)
+
 applications:
-  internal_port: 8000 # Standard port used by all FastAPI apps inside containers
+  internal_port: 8000 # Standard port used by the FastAPI apps inside containers
 
+  # Host bindings published directly by the apps (bypass Traefik)
+  portfolio: 4000 # app
+  portfolio-db: 5433 # postgres
+  wedding-photos: 8000 # app (DB and MinIO host ports come from its .env)
+  whatsapp-assistant:
+    wa-ass: 1000 # app, container 8000
+    wa-ass-db: 5435 # postgres
 
-  # Apps are accessed via Traefik reverse proxy:
-  # - localhost:8080/portfolio
-  # - localhost:8080/small-games
-  #
-  # Apps do NOT expose ports directly to the host - they only expose internally
-  # to the traefik-network where Traefik routes traffic to them
+  # Apps are normally accessed via the Traefik reverse proxy (path-based routing):
+  # - https://danilocatone.com/portfolio
+  # - https://danilocatone.com/wedding-photos
+  # - https://danilocatone.com/whatsapp-assistant
+  # - https://danilocatone.com/prova
+  # - https://danilocatone.com/privacy-policy
+  # - https://danilocatone.com/wg-easy
+  # dls-platform(-staging) and dls-platform-webapp(-staging) are routed only through Traefik.

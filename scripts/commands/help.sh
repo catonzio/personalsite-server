@@ -18,12 +18,12 @@ Commands:
   restart [service]  Restart service(s) - all if no service specified
   build [service]    Build service(s) - all apps if no service specified
   pull [service] [--build|--rebuild]  Git pull, then optionally build or rebuild+restart
-  rebuild [service]  Rebuild and restart service(s)
+  rebuild [service]  Rebuild and restart service(s) - all apps if no service specified
   logs <service> [-f]  Show logs for a service (use -f to follow)
   services           List all discovered services
   status             Show status of all services
   ps                 Show running containers
-  clean              Stop all services and clean up Docker resources
+  clean              Stop all services and run docker system prune -f (system-wide)
   help               Show this help message
 
 Currently Discovered Services:
@@ -45,15 +45,17 @@ EOF
 
 How to add new services:
   1. Create a new directory under apps/ or infra/
-  2. Add a docker-compose.yml file
+  2. Add a docker-compose.yml or compose.yaml file
   3. The script will automatically discover it!
+  (or use: $0 bootstrap <name>)
 
 Examples:
   $0 bootstrap my-new-app      # Create a new app called "my-new-app"
   $0 init                      # Initialize everything
   $0 start                     # Start all services
   $0 start portfolio           # Start only portfolio
-  $0 stop small-games          # Stop small-games
+  $0 stop wedding-photos       # Stop wedding-photos
+  $0 pull portfolio --rebuild  # git pull this repo, then rebuild portfolio
   $0 restart traefik           # Restart traefik
   $0 rebuild portfolio         # Rebuild and restart portfolio
   $0 logs portfolio            # Show portfolio logs

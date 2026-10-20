@@ -1,168 +1,78 @@
-# Personal Server Mock Environment
+# Personal Server
 
-A local development environment that mocks a personal server setup with Traefik reverse proxy, multiple FastAPI applications served as subpaths, and Portainer for container management.
+Home server on a laptop (Dell XPS 13 7390, Ubuntu) serving `danilocatone.com`. Every service runs with Docker Compose behind a **Traefik** reverse proxy that terminates HTTPS with an automatically renewed Let's Encrypt wildcard certificate. Apps are exposed as **subpaths of one host** (e.g. `https://danilocatone.com/portfolio/`).
+
+> Agent/AI context lives in [CLAUDE.md](CLAUDE.md). Traefik details: [infra/README.md](infra/README.md). Management scripts: [scripts/README.md](scripts/README.md).
 
 ## 📁 Project Structure
 
 ```text
 .
-├── manage.sh                  # Central management script for all services
-├── apps/                      # All application services
-│   ├── portfolio/            # Portfolio FastAPI app
-│   │   ├── app.py
-│   │   ├── Dockerfile
-│   │   ├── requirements.txt
-│   │   └── docker-compose.yml
-│   └── small-games/          # Small games FastAPI app
-│       ├── app.py
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       └── docker-compose.yml
-│
-└── infra/                     # Infrastructure services
-    ├── traefik/              # Reverse proxy with auto-discovery
-    │   ├── docker-compose.yml
-    │   ├── traefik.yml
-    │   ├── traefik_dynamic.yml
-    │   ├── .env              # DNS provider API keys (not committed)
-    │   └── letsencrypt/      # acme.json with the issued certificate (not committed)
-    ├── portainer/            # Container management UI
-    │   └── docker-compose.yml
-    ├── .env                  # Centralized port and environment configuration
-    └── ports.yml             # Port documentation reference
+├── manage.sh                 # Central management script (auto-discovers services)
+├── scripts/                  # manage.sh libraries and commands (see scripts/README.md)
+├── apps/                     # Applications (git-ignored: each app is its own git repo)
+│   ├── portfolio/            # Personal site, also the target of "/"
+│   ├── wedding-photos/
+│   ├── whatsapp-assistant/
+│   ├── prova/                # Demo app (FE + BE), reference for new apps
+│   └── dls-platform*/        # DLS platform + webapp, prod and -staging copies
+└── infra/                    # Infrastructure stacks (tracked in this repo)
+    ├── ports.env             # Shared host ports + domain
+    ├── ports.yml             # Port reference (documentation)
+    ├── traefik/              # Reverse proxy + ACME (traefik.yml, traefik_dynamic.yml, .env, letsencrypt/)
+    ├── portainer/            # Docker UI
+    ├── pi-hole/              # LAN DNS
+    ├── wg-easy/              # WireGuard VPN
+    ├── privacy-policy/       # Go server for the privacy policies (policies/*.md)
+    ├── update-ddns/          # Host cron script: updates IONOS DynamicDNS on IP change
+    └── waha/                 # WhatsApp HTTP API data (env + sessions only)
 ```
 
 ## 🚀 Quick Start
 
-### Option 1: Using Management Script (Recommended)
-
-The easiest way to manage services:
-
 ```bash
-# Initialize everything (first time setup)
-./manage.sh init
-
-# Or start services manually
-./manage.sh start              # Start all services
-./manage.sh start portfolio    # Start specific service
-./manage.sh status             # Check status
+./manage.sh start              # traefik first, then other infra, then apps
+./manage.sh start portfolio    # one service
+./manage.sh status             # what is running
+./manage.sh help               # all commands
 ```
 
-### Option 2: Manual Docker Compose
-
-Start Traefik first (required to create shared network):
-
-```bash
-cd infra/traefik
-docker compose up -d
-```
-
-Then start applications:
-
-```bash
-# Start portfolio
-cd apps/portfolio
-docker compose up -d
-
-# Start small-games
-cd apps/small-games
-docker compose up -d
-```
-
-(Optional) Start Portainer:
-
-```bash
-cd infra/portainer
-docker compose up -d
-```
+Without the script, start Traefik first (it creates the shared `traefik-network`), then `docker compose up -d` in each service dir.
 
 ## 🌐 Accessing Services
 
-Once running, services are available at:
-
-- **Portfolio App**: <http://localhost:8080/portfolio>
-  - Health check: <http://localhost:8080/portfolio/health>
-  - Info: <http://localhost:8080/portfolio/info>
-  
-- **Small Games**: <http://localhost:8080/small-games>
-  - Health check: <http://localhost:8080/small-games/health>
-  - Games list: <http://localhost:8080/small-games/games>
-
-- **Traefik Dashboard**: <http://localhost:8081>
-  - View all discovered services and routes
-
-- **Portainer**: <http://localhost:9000> or <https://localhost:9443>
-  - Container management UI
+| Service | URL |
+|---------|-----|
+| Portfolio (also `/`) | <https://danilocatone.com/portfolio/> |
+| Other apps | `https://danilocatone.com/<app>/` (wedding-photos, whatsapp-assistant, prova, dls-platform, ...) |
+| Privacy policies | <https://danilocatone.com/privacy-policy/> |
+| Traefik dashboard | <https://traefik.danilocatone.com> (basic auth), or `http://<server>:8081` on LAN (no auth) |
+| Portainer | `https://<server>:9443` / `http://<server>:9000` |
+| Pi-hole admin | `http://<server>:8080/admin` |
+| wg-easy UI | `http://<server>:51821` (VPN on 51820/udp) |
 
 ## 🎮 Management Script
 
-A centralized `manage.sh` script with **automatic service discovery** provides easy management of all services.
-
-### ✨ Auto-Discovery Feature
-
-The script automatically discovers all services by scanning:
-
-- `infra/` directory for infrastructure services
-- `apps/` directory for application services
-
-**No code changes needed** - just add a folder with a `docker-compose.yml` and it's instantly available!
-
-### Commands
+`manage.sh` auto-discovers services: every `infra/*/` dir and every `apps/**` dir that contains a `docker-compose.yml` or `compose.yaml` (for apps, recursion stops at the first compose file found). It runs `docker compose` inside the service dir, so that dir's `.env` (including `COMPOSE_FILE` / `COMPOSE_PROJECT_NAME`) applies.
 
 ```bash
-# Initialization
-./manage.sh init                 # Build and start everything
-
-# Service Control
-./manage.sh start [service]      # Start all or specific service
-./manage.sh stop [service]       # Stop all or specific service  
-./manage.sh restart [service]    # Restart all or specific service
-
-# Building
-./manage.sh build [service]      # Build application images
-./manage.sh rebuild [service]    # Rebuild and restart (useful after code changes)
-
-# Monitoring
-./manage.sh status               # Show status of all services
-./manage.sh logs <service> [-f]  # View logs (use -f to follow)
-./manage.sh ps                   # Show running containers
-
-# Cleanup
-./manage.sh clean                # Stop all and clean up Docker resources
-
-# Help
-./manage.sh help                 # Show all available commands
+./manage.sh bootstrap <name>                 # scaffold a new app (FastAPI BE + HTML FE)
+./manage.sh start|stop|restart [service]     # all if omitted
+./manage.sh build|rebuild [service]          # all APPS if omitted (infra untouched)
+./manage.sh pull [service] [--build|--rebuild]  # git pull of THIS repo only, then optional build
+./manage.sh logs <service> [-f]
+./manage.sh status | ps | services
+./manage.sh init                             # build + start everything
+./manage.sh clean                            # down all + docker system prune -f (system-wide!)
 ```
 
-**Examples:**
+Details and known quirks: [scripts/README.md](scripts/README.md).
 
-```bash
-./manage.sh start portfolio      # Start only portfolio
-./manage.sh rebuild small-games  # Rebuild after code changes
-./manage.sh logs traefik -f      # Follow traefik logs
-./manage.sh status               # Check what's running
-```
+## ⚙️ Ports
 
-## ⚙️ Port Configuration
+Shared host ports and the domain are in `infra/ports.env` (`TRAEFIK_DOMAIN`, `TRAEFIK_HTTP_PORT=80`, `TRAEFIK_HTTPS_PORT=443`, `TRAEFIK_DASHBOARD_PORT=8081`, `PORTAINER_*`, `APP_INTERNAL_PORT=8000`). Full list of host ports in `infra/ports.yml`.
 
-All ports are centralized in `infra/.env` for easy management:
-
-```bash
-# External Ports (accessible from host)
-TRAEFIK_HTTP_PORT=8080          # Main entry point for all apps
-TRAEFIK_DASHBOARD_PORT=8081     # Traefik dashboard
-PORTAINER_HTTP_PORT=9000        # Portainer UI
-PORTAINER_HTTPS_PORT=9443       # Portainer HTTPS
-
-# Internal Port (used by apps inside containers)
-APP_INTERNAL_PORT=8000          # All FastAPI apps listen on this port
-```
-
-**Important:** Applications use port 8000 *internally* within their containers and are *not* exposed directly to the host. All traffic goes through Traefik on port 8080, which routes to apps based on the URL path.
-
-To change ports, edit `infra/.env` and restart: `./manage.sh restart`
-
-See `infra/ports.yml` for detailed port documentation.
+Apps should be reached only through Traefik (80/443). Some stacks also publish ports on the host (pi-hole, portainer, wg-easy, privacy-policy 4100, some app/DB ports); see `ports.yml`.
 
 ## 🔒 HTTPS Certificate (Let's Encrypt)
 
@@ -230,197 +140,52 @@ If your provider has no API (or you do not need a wildcard) use the HTTP challen
 - Do **not** set a manual `tls.stores.default.defaultCertificate` for the same domain: Traefik then considers the domain already covered and never requests the Let's Encrypt certificate.
 - If a router has `sniStrict` TLS options (as in `traefik_dynamic.yml`), HTTPS fails for every hostname until the first certificate has been issued (about 1-2 minutes after a first start).
 
-## 🔍 How It Works
+## 🔍 How Routing Works
 
-> 💡 **For comprehensive Traefik documentation**, see the [Traefik Cheatsheet](infra/README.md) with detailed routing rules, debugging tips, middleware configuration, and more.
+> 💡 Full reference: [Traefik Cheatsheet](infra/README.md).
 
-### Automatic Service Discovery
+- Entrypoints: `web` (:80, permanent redirect to HTTPS) and `websecure` (:443).
+- Providers: Docker labels (`exposedByDefault=false`) + file provider (`infra/traefik/traefik_dynamic.yml`, hot reloaded).
+- `traefik_dynamic.yml` holds the `root-redirect` router (`/` → `/portfolio/`), the dashboard router `api` (`traefik.danilocatone.com`, basic auth) and shared middlewares.
+- Networks: shared external `traefik-network` + a private network per app (DBs stay off `traefik-network`).
 
-Traefik automatically discovers new services through Docker labels:
+Label template for an app (current convention):
 
 ```yaml
 labels:
   - "traefik.enable=true"
-  - "traefik.http.routers.{service}.rule=PathPrefix(`/{subpath}`)"
-  - "traefik.http.routers.{service}.entrypoints=web"
-  - "traefik.http.services.{service}.loadbalancer.server.port=8000"
   - "traefik.docker.network=traefik-network"
+  - "traefik.http.routers.<app>.rule=PathPrefix(`/<app>`)"
+  - "traefik.http.routers.<app>.entrypoints=websecure"
+  - "traefik.http.routers.<app>.tls=true"            # wildcard cert served via SNI, no certresolver needed
+  - "traefik.http.routers.<app>.middlewares=<app>-slash,<app>-strip"
+  - "traefik.http.middlewares.<app>-slash.redirectregex.regex=^https?://([^/]+)/<app>$$"
+  - "traefik.http.middlewares.<app>-slash.redirectregex.replacement=https://$${1}/<app>/"
+  - "traefik.http.middlewares.<app>-slash.redirectregex.permanent=true"
+  - "traefik.http.middlewares.<app>-strip.stripprefix.prefixes=/<app>"
+  - "traefik.http.services.<app>.loadbalancer.server.port=8000"
 ```
 
-### Subpath Routing
+Either strip the prefix in Traefik **or** make the app aware of it (e.g. FastAPI `root_path`), not both. Router/middleware names are global across all stacks and must be unique. Use `priority` when prefixes overlap (API 100, FE 50).
 
-Each FastAPI application is configured with `root_path` to work correctly behind a reverse proxy:
+## 📝 Adding a New Application
 
-```python
-app = FastAPI(root_path="/portfolio")
-```
-
-This ensures the OpenAPI docs and all routes work correctly under the subpath.
-
-### Network Architecture
-
-- **traefik-network**: Shared network for all services to communicate with Traefik
-- **{app}-network**: Isolated network for each application's internal services
-
-## 📝 Adding New Applications
-
-The management script **auto-discovers** all applications! Just create a directory with a docker-compose.yml file.
-
-### Quick Steps
-
-1. Create a new directory under `apps/`:
-
-   ```bash
-   mkdir -p apps/my-new-app
-   ```
-
-2. Create your FastAPI application (`apps/my-new-app/app.py`):
-
-   ```python
-   from fastapi import FastAPI
-   
-   app = FastAPI(root_path="/my-new-app")
-   
-   @app.get("/")
-   async def root():
-       return {"app": "my-new-app", "status": "running"}
-   ```
-
-3. Create a `docker-compose.yml` with Traefik labels:
-
-   ```yaml
-   services:
-     my-new-app:
-       build: .
-       container_name: my-new-app-app
-       networks:
-         - my-new-app-network
-         - traefik-network
-       labels:
-         - "traefik.enable=true"
-         - "traefik.http.routers.my-new-app.rule=PathPrefix(`/my-new-app`)"
-         - "traefik.http.routers.my-new-app.entrypoints=web"
-         - "traefik.http.services.my-new-app.loadbalancer.server.port=8000"
-         - "traefik.docker.network=traefik-network"
-   
-   networks:
-     my-new-app-network:
-       driver: bridge
-     traefik-network:
-       external: true
-   ```
-
-4. **That's it!** The app is now auto-discovered. Use the management script:
-
-   ```bash
-   ./manage.sh build my-new-app      # Build the new app
-   ./manage.sh start my-new-app      # Start it
-   ./manage.sh status                # See it in the list!
-   ```
-
-The script automatically:
-
-- ✅ Discovers your new app (no script modifications needed)
-- ✅ Shows it in `./manage.sh status` with the URL
-- ✅ Includes it in `./manage.sh start` (starts all apps)
-- ✅ Lists it in `./manage.sh help`
-
-Access your new app at: `http://localhost:8080/my-new-app`
-
-Traefik will automatically discover and route traffic to your new application!
-
-## 🛠️ Manual Docker Commands
-
-For those who prefer direct Docker commands (or if not using the management script):
-
-### View Running Containers
-
-```bash
-docker ps
-# Or use the management script
-./manage.sh ps
-```
-
-### View Logs
-
-```bash
-# Manual Docker logs
-docker logs traefik -f
-docker logs portfolio-app -f
-docker logs small-games-app -f
-
-# Or use the management script
-./manage.sh logs traefik -f
-./manage.sh logs portfolio -f
-```
-
-### Stop Services
-
-```bash
-# Manual approach - stop a specific app
-cd apps/portfolio
-docker compose down
-
-# Or use the management script
-./manage.sh stop portfolio
-./manage.sh stop  # Stop all
-```
-
-### Rebuild After Code Changes
-
-```bash
-# Manual approach
-cd apps/portfolio
-docker compose up -d --build
-
-# Or use the management script (recommended)
-./manage.sh rebuild portfolio
-```
+1. `./manage.sh bootstrap my-app`: creates `apps/my-app/` with `be/` (FastAPI, `/my-app/api`) and `fe/` (static, `/my-app`) and a compose file with Traefik labels. Or create `apps/my-app/` by hand with a compose file following the template above.
+2. Usually `git init` it as its own repo (`apps/` is ignored by this repo).
+3. `./manage.sh build my-app && ./manage.sh start my-app`
+4. Open `https://danilocatone.com/my-app/`.
 
 ## 🐛 Troubleshooting
 
-> 💡 **For detailed Traefik debugging**, see the [Troubleshooting section](infra/README.md#debugging--troubleshooting) in the Traefik Cheatsheet.
+> 💡 More in the [Traefik troubleshooting section](infra/README.md#debugging--troubleshooting).
 
-### Application not accessible
+- **App not reachable**: `docker ps | grep traefik`; check the router in the dashboard; check the container is on `traefik-network` (`docker network inspect traefik-network`).
+- **404**: path does not match the rule, or prefix stripped twice / not at all.
+- **502**: wrong `loadbalancer.server.port`, or app listening on `127.0.0.1` instead of `0.0.0.0`.
+- **TLS error**: `sniStrict` is on, so use the real hostname (`curl --resolve danilocatone.com:443:127.0.0.1 https://danilocatone.com/...`), not `https://localhost`.
+- **Logs**: `./manage.sh logs <service> -f` or `docker logs traefik 2>&1 | grep -i <name>`.
 
-1. Check if Traefik is running: `docker ps | grep traefik`
-2. Check Traefik dashboard at <http://localhost:8081> for discovered routes
-3. Verify the container is on the traefik-network: `docker inspect {container} | grep traefik-network`
+## 📚 Resources
 
-### Port already in use
-
-If port 8080 or 8081 is already in use, edit `infra/.env` to use different ports:
-
-```bash
-TRAEFIK_HTTP_PORT=8090
-TRAEFIK_DASHBOARD_PORT=8091
-```
-
-Then restart Traefik:
-
-```bash
-cd infra/traefik
-docker compose down
-docker compose up -d
-```
-
-### Container won't start
-
-Check logs for errors:
-
-```bash
-docker logs {container-name}
-```
-
-## 📚 Additional Resources
-
-### Project Documentation
-
-- **[Traefik Comprehensive Cheatsheet](infra/README.md)** - Complete guide to Traefik configuration, routing rules, Docker labels, debugging, and advanced features
-
-### External Documentation
-
-- [Traefik Documentation](https://doc.traefik.io/traefik/)
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Docker Compose Documentation](https://docs.docker.com/compose/)
-- [Portainer Documentation](https://docs.portainer.io/)
+- [Traefik Cheatsheet](infra/README.md) · [Scripts](scripts/README.md) · [Bootstrap](scripts/commands/bootstrap/README.md)
+- [Traefik docs](https://doc.traefik.io/traefik/) · [Docker Compose](https://docs.docker.com/compose/) · [Portainer](https://docs.portainer.io/) · [wg-easy](https://github.com/wg-easy/wg-easy) · [Pi-hole](https://docs.pi-hole.net/)
