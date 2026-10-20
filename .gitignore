@@ -5,6 +5,7 @@ infra/traefik/.env
 
 infra/pi-hole/etc-pihole
 infra/wg-easy/wg-easy
+infra/wg-easy/.env
 
 wireguard
 
