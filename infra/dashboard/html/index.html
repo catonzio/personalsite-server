@@ -17,38 +17,83 @@
   </main>
   <script src="services.js"></script>
   <script>
-    function urlFor(s) {
-      if (s.lan) return `${s.scheme}://${LAN_HOST}:${s.port}${s.path}`;
-      return `${location.origin}${s.path}`;
+    const root = document.getElementById("groups");
+
+    function card({ name, desc, url, badge }) {
+      const a = document.createElement("a");
+      a.className = "card";
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.innerHTML = '<span class="name"></span><span class="desc"></span><span class="url"></span>';
+      a.querySelector(".name").textContent = name;
+      if (badge) {
+        const b = document.createElement("span");
+        b.className = "badge";
+        b.textContent = badge;
+        a.querySelector(".name").append(b);
+      }
+      a.querySelector(".desc").textContent = desc || "";
+      a.querySelector(".url").textContent = url.replace(/^https?:\/\//, "");
+      return a;
     }
 
-    const root = document.getElementById("groups");
-    for (const g of GROUPS) {
-      const section = document.createElement("section");
+    function section(title, note) {
+      const s = document.createElement("section");
       const h2 = document.createElement("h2");
-      h2.textContent = g.title;
-      const note = document.createElement("span");
-      note.className = "note";
-      note.textContent = g.note || "";
-      h2.append(note);
+      h2.textContent = title;
+      const n = document.createElement("span");
+      n.className = "note";
+      n.textContent = note;
+      h2.append(n);
       const grid = document.createElement("div");
       grid.className = "grid";
-      for (const s of g.services) {
-        const url = urlFor(s);
-        const a = document.createElement("a");
-        a.className = "card";
-        a.href = url;
-        a.target = "_blank";
-        a.rel = "noopener";
-        a.innerHTML = '<span class="name"></span><span class="desc"></span><span class="url"></span>';
-        a.querySelector(".name").textContent = s.name;
-        a.querySelector(".desc").textContent = s.desc || "";
-        a.querySelector(".url").textContent = url.replace(/^https?:\/\//, "");
-        grid.append(a);
-      }
-      section.append(h2, grid);
-      root.append(section);
+      s.append(h2, grid);
+      root.append(s);
+      return grid;
     }
+
+    // Infrastructure: static list from services.js
+    const infraGrid = section("Infrastructure", "Home LAN or VPN only");
+    for (const s of INFRA) {
+      infraGrid.append(card({ ...s, url: `${s.scheme}://${LAN_HOST}:${s.port}${s.path}` }));
+    }
+
+    // Apps: one card per top-level path found in enabled Traefik routers.
+    const appsGrid = section("Apps", "Discovered from Traefik");
+
+    function appsFromRouters(routers) {
+      const apps = new Map();
+      for (const r of routers) {
+        if (r.status !== "enabled" || r.name.endsWith("@internal")) continue;
+        const auth = (r.middlewares || []).some((m) => /auth/i.test(m));
+        for (const [, path] of (r.rule || "").matchAll(/(?:PathPrefix|Path)\(`([^`]*)`\)/g)) {
+          const seg = path.split("/")[1];
+          if (!seg || HIDDEN_PATHS.includes(seg)) continue;
+          const app = apps.get(seg) || { auth: false };
+          app.auth = app.auth || auth;
+          apps.set(seg, app);
+        }
+      }
+      return [...apps.entries()].sort(([a], [b]) => a.localeCompare(b));
+    }
+
+    fetch("api/http/routers?per_page=1000", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((routers) => {
+        const apps = appsFromRouters(routers);
+        if (!apps.length) appsGrid.textContent = "No apps found.";
+        for (const [seg, app] of apps) {
+          appsGrid.append(card({
+            name: seg,
+            url: `${location.origin}/${seg}/`,
+            badge: app.auth ? "login" : "",
+          }));
+        }
+      })
+      .catch((err) => {
+        appsGrid.textContent = `Could not load apps from Traefik (${err.message}).`;
+      });
   </script>
 </body>
 </html>

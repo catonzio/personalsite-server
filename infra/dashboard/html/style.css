@@ -74,6 +74,16 @@ h2 {
 }
 
 .name { font-weight: 600; }
+.badge {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+  vertical-align: middle;
+}
 .desc { color: var(--muted); font-size: 0.9rem; }
 .url {
   margin-top: 6px;

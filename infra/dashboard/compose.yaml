@@ -22,6 +22,13 @@ services:
       # services@file = basicAuth defined in infra/traefik/traefik_dynamic.yml
       - "traefik.http.routers.infra-dashboard.middlewares=infra-dashboard-slash,services@file,infra-dashboard-strip"
       - "traefik.http.services.infra-dashboard.loadbalancer.server.port=80"
+      # Read-only Traefik API at /infra/api/*, used by the page to list apps.
+      - "traefik.http.routers.infra-dashboard-api.rule=PathPrefix(`/infra/api/`)"
+      - "traefik.http.routers.infra-dashboard-api.entrypoints=websecure"
+      - "traefik.http.routers.infra-dashboard-api.tls=true"
+      - "traefik.http.routers.infra-dashboard-api.priority=60"
+      - "traefik.http.routers.infra-dashboard-api.middlewares=services@file,infra-dashboard-strip"
+      - "traefik.http.routers.infra-dashboard-api.service=api@internal"
 
 networks:
   traefik-network:
