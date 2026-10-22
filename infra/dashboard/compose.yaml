@@ -5,9 +5,15 @@ services:
     restart: unless-stopped
     networks:
       - traefik-network
+      - monitoring
+    ports:
+      # Local kiosk on the laptop screen: http://127.0.0.1:8090/#monitor
+      - "127.0.0.1:8090:80"
     volumes:
-      # Static launcher page; edit html/services.js, no restart needed.
+      # Static page (Services + Monitor tabs); edits are live, no restart needed.
       - ./html:/usr/share/nginx/html:ro
+      # Serves html/ and proxies read-only data APIs (Glances, Prometheus, Traefik).
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-network"
@@ -23,6 +29,7 @@ services:
       - "traefik.http.routers.infra-dashboard.middlewares=infra-dashboard-slash,services@file,infra-dashboard-strip"
       - "traefik.http.services.infra-dashboard.loadbalancer.server.port=80"
       # Read-only Traefik API at /infra/api/*, used by the page to list apps.
+      # (Locally, on :8090, nginx proxies /api/ to traefik:8080 instead.)
       - "traefik.http.routers.infra-dashboard-api.rule=PathPrefix(`/infra/api/`)"
       - "traefik.http.routers.infra-dashboard-api.entrypoints=websecure"
       - "traefik.http.routers.infra-dashboard-api.tls=true"
@@ -30,6 +37,80 @@ services:
       - "traefik.http.routers.infra-dashboard-api.middlewares=services@file,infra-dashboard-strip"
       - "traefik.http.routers.infra-dashboard-api.service=api@internal"
 
+  # --- Monitoring data sources (read by the Monitor tab via nginx) ----------
+  # Live:    glances (REST API only)          -> /glances/api/4/...
+  # History: node-exporter -> prometheus      -> /prom/api/v1/query[_range]
+
+  # Host metrics exporter, incl. RAPL energy counters. Host network + host PID
+  # so network/process stats are the host's. Reads /proc and /sys through the
+  # host bind mount: Docker masks /sys/devices/virtual/powercap inside
+  # containers, so the container's own /sys has no RAPL. Root is needed because
+  # energy_uj is root-only. Listens only on the docker0 address (not the LAN).
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    container_name: node-exporter
+    restart: unless-stopped
+    user: "0:0"
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.udev.data=/host/run/udev/data
+      - --web.listen-address=172.17.0.1:9100
+      - --collector.processes
+      # Skip docker bridges/veths and pseudo filesystems: fewer series, less disk.
+      - --collector.netdev.device-exclude=^(lo|veth.*|br-.*|docker0)$$
+      - --collector.netclass.ignored-devices=^(lo|veth.*|br-.*|docker0)$$
+      - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs)$$
+
+  # Time-series store: one sample per minute, kept 180 days. No Traefik route.
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    container_name: prometheus
+    restart: unless-stopped
+    networks:
+      - monitoring
+    extra_hosts:
+      # Resolves to the docker0 gateway (172.17.0.1), where node-exporter listens.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=180d
+      # Safety cap; expected usage is well below this.
+      - --storage.tsdb.retention.size=5GB
+
+  # Live stats (CPU, RAM, load, sensors, process list), REST API only.
+  # Host PID to see host processes; /proc and /sys are global, so CPU, RAM,
+  # load and sensors are the host's. Only the plugins used by the page are on:
+  # network/container plugins would show the container itself anyway.
+  glances:
+    image: nicolargo/glances:4.5.8
+    container_name: glances
+    restart: unless-stopped
+    pid: host
+    networks:
+      - monitoring
+    environment:
+      GLANCES_OPT: "-w --disable-webui -t 2 --disable-check-update --sort-processes cpu_percent --disable-plugin all --enable-plugin core,system,uptime,quicklook,cpu,percpu,load,mem,memswap,sensors,processcount,processlist"
+    volumes:
+      # Host user names in the process list.
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+
 networks:
   traefik-network:
     external: true
+  # Dashboard <-> Glances/Prometheus. Not "internal: true", because Prometheus
+  # must reach node-exporter on the host (docker0) through the bridge gateway.
+  monitoring:
+
+volumes:
+  prometheus-data:
