@@ -6,16 +6,43 @@
   <meta name="robots" content="noindex">
   <title>Home server</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="monitor.css">
 </head>
 <body>
   <main>
-    <header>
-      <h1>Home server</h1>
-      <p class="sub">danilocatone.com</p>
+    <header class="top">
+      <div>
+        <h1>Home server</h1>
+        <p class="sub">danilocatone.com</p>
+      </div>
+      <nav class="tabs" role="tablist">
+        <a href="#services" role="tab" data-tab="services">Services</a>
+        <a href="#monitor" role="tab" data-tab="monitor">Monitor</a>
+      </nav>
     </header>
-    <div id="groups"></div>
+    <div id="tab-services" role="tabpanel">
+      <div id="groups"></div>
+    </div>
+    <div id="tab-monitor" role="tabpanel" hidden></div>
   </main>
   <script src="services.js"></script>
+  <script src="monitor.js"></script>
+  <script>
+    // Tabs: selected by URL hash (#services, #monitor), so a bookmark or the
+    // kiosk can open a tab directly.
+    function showTab() {
+      const tab = location.hash === "#monitor" ? "monitor" : "services";
+      for (const a of document.querySelectorAll(".tabs a")) {
+        a.setAttribute("aria-selected", String(a.dataset.tab === tab));
+      }
+      document.getElementById("tab-services").hidden = tab !== "services";
+      document.getElementById("tab-monitor").hidden = tab !== "monitor";
+      document.body.classList.toggle("wide", tab === "monitor");
+      Monitor.setActive(tab === "monitor");
+    }
+    window.addEventListener("hashchange", showTab);
+    showTab();
+  </script>
   <script>
     const root = document.getElementById("groups");
 

@@ -10,5 +10,9 @@ const INFRA = [
   { name: "Traefik", desc: "Routers and services", scheme: "http", port: 8081, path: "/dashboard/" },
 ];
 
+// Monitor tab: default live refresh (seconds) and history range. Both can be
+// changed in the page (remembered per browser) or via URL, e.g. ?refresh=10&range=7d
+const MONITOR_DEFAULTS = { refresh: 5, range: "24h" };
+
 // Top-level paths never shown as apps.
 const HIDDEN_PATHS = ["api", "infra", "dashboard"];
