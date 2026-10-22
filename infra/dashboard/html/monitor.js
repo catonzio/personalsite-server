@@ -237,10 +237,26 @@ const Monitor = (() => {
   }
 
   // ---- live (Glances) -----------------------------------------------------
+  let liveBusy = false;
   async function updateLive() {
-    const names = ["quicklook", "load", "mem", "memswap", "sensors", "uptime", "processcount", "processlist/top/20"];
+    if (liveBusy) return; // previous round still running (slow server)
+    liveBusy = true;
+    try {
+      await liveRound();
+    } finally {
+      liveBusy = false;
+    }
+  }
+
+  async function liveRound() {
+    // Process CPU% is measured by Glances between two process scans, and
+    // every processlist/processcount request triggers a scan. Two scans a few
+    // ms apart inflate CPU% (e.g. 400%). So processlist is the only scanning
+    // request (nginx also caches it for 2s, for several open pages), and the
+    // process counts come from Prometheus instead (see updateProcCounts).
+    const names = ["quicklook", "load", "mem", "memswap", "sensors", "uptime", "processlist/top/20"];
     const res = await Promise.allSettled(names.map(glances));
-    const [ql, load, mem, swap, sensors, uptime, pc, procs] = res.map((r) => (r.status === "fulfilled" ? r.value : null));
+    const [ql, load, mem, swap, sensors, uptime, procs] = res.map((r) => (r.status === "fulfilled" ? r.value : null));
     if (res.every((r) => r.status === "rejected")) {
       setStatus("live", `Glances unreachable (${res[0].reason.message})`);
       return;
@@ -279,7 +295,6 @@ const Monitor = (() => {
       const m = String(uptime).match(/(?:(\d+) days?, )?(\d+):(\d+)/);
       if (m) setTile("uptime", m[1] ? `${m[1]}d ${m[2]}h` : `${m[2]}h ${m[3]}m`, "");
     }
-    if (pc) $("m-pc").textContent = `${pc.total} total · ${pc.running} running · ${pc.thread} threads`;
     if (procs) renderProcs(procs);
   }
 
@@ -350,11 +365,21 @@ const Monitor = (() => {
           drawLine(c);
         }),
         updateEnergy(),
+        updateProcCounts(),
       ]);
       setStatus("history", `History ${clock(new Date())}`);
     } catch (err) {
       setStatus("history", `Prometheus unreachable (${err.message})`);
     }
+  }
+
+  async function updateProcCounts() {
+    const [total, running, threads] = await Promise.all([
+      promQuery("sum(node_processes_state)"),
+      promQuery('sum(node_processes_state{state="R"}) or vector(0)'),
+      promQuery("node_processes_threads"),
+    ]);
+    if (total != null) $("m-pc").textContent = `${total} total · ${running} running · ${threads} threads`;
   }
 
   async function updateEnergy() {
