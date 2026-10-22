@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Server dashboard (kiosk)
+Comment=Full-screen Monitor tab of the infra dashboard on the laptop screen
+# Separate Firefox profile so the kiosk never touches the normal profile.
+# The delay lets Docker start the dashboard after a reboot.
+# Refresh interval and history range can be set in the URL: ?refresh=5&range=24h
+Exec=sh -c 'sleep 30; P="$HOME/.local/share/server-dashboard-kiosk"; mkdir -p "$P"; exec firefox-esr --kiosk --no-remote --profile "$P" "http://127.0.0.1:8090/?refresh=5&range=24h#monitor"'
+X-GNOME-Autostart-enabled=true
+NoDisplay=false
