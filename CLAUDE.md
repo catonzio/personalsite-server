@@ -1,6 +1,6 @@
 # personalsite-server
 
-Home server workspace on a Dell XPS 13 7390 (Ubuntu), LAN 192.168.1.0/24. Public domain `danilocatone.com`, DDNS on IONOS.
+Home server workspace on a Dell XPS 13 7390 (Debian 12 bookworm, GNOME), LAN 192.168.1.0/24. Public domain `danilocatone.com`, DDNS on IONOS.
 Everything runs in Docker Compose behind Traefik. Root repo: `git@github.com:catonzio/personalsite-server.git`.
 **READMEs are partly stale** (they describe a "mock" localhost:8080 HTTP setup, and `infra/ports.yml` is also stale). Trust the config files.
 
@@ -76,4 +76,5 @@ Everything runs in Docker Compose behind Traefik. Root repo: `git@github.com:cat
 - Known committed secrets: the pi-hole web password in `infra/pi-hole/compose.yaml` (an old, never-valid basicAuth hash is still in git history). The root `.gitignore` does **not** ignore `.env` globally (only `infra/traefik/.env` and `infra/wg-easy/.env`), so check `git status` for untracked env files before proposing a commit.
 - Escape `$` as `$$` **only in compose files** (labels/environment). In `traefik_dynamic.yml` and in `.env` values `$$` stays literal and breaks bcrypt hashes.
 - Server LAN IP: `192.168.1.101`. Subdomains (`*.danilocatone.com`) have no DNS records; only the apex resolves.
+- Host: lid switch is ignored in `logind.conf` (runs with the lid closed). A GNOME session for user `dcatone` is always logged in (tty2), and `firefox-esr` is installed. The internal panel is `eDP-1`. RAPL energy counters (`/sys/class/powercap/intel-rapl*/energy_uj`) are root-only and cover only CPU/SoC, not wall power. USB-C `power_supply` values show the negotiated PD contract (20V/2.25A), not the real draw. There is no smart plug.
 - Debug routing: `docker logs traefik 2>&1 | grep -i <x>` and the dashboard at :8081. Check the cert with `openssl s_client -connect localhost:443 -servername danilocatone.com`.
